@@ -5,7 +5,8 @@ import json
 import sys
 from pathlib import Path
 
-from evidence_vault.ingest import IngestMetadata, ingest_path, successful
+from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
+from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.validation import validate_vault
 
 
@@ -21,6 +22,12 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--published", dest="publication_date")
     ingest.add_argument("--url", dest="canonical_url")
     ingest.add_argument("--language")
+
+    observe = subparsers.add_parser(
+        "observe",
+        help="append a validated temporal observation (never rewrites an existing observation_id)",
+    )
+    observe.add_argument("path", type=Path, help="JSON observation document")
 
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
@@ -40,8 +47,17 @@ def main(argv: list[str] | None = None) -> int:
         results = ingest_path(vault_root, args.path, metadata)
         payload = {
             "operation": "ingest",
-            "success": successful(results),
+            "success": ingest_successful(results),
             "results": [result.to_dict() for result in results],
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if payload["success"] else 1
+    if args.command == "observe":
+        result = append_observation_path(vault_root, args.path)
+        payload = {
+            "operation": "observe",
+            "success": observe_successful([result]),
+            "results": [result.to_dict()],
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if payload["success"] else 1
