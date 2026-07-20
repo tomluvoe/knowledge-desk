@@ -12,6 +12,7 @@ from evidence_vault.observe import append_observation_path, successful as observ
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
 from evidence_vault.perspective import perspective_at, perspective_timeline
 from evidence_vault.validation import validate_vault
+from evidence_vault.wiki import evolve_wiki, refine_validate_wiki
 from evidence_vault.youtube_transcript import (
     fetch_and_ingest_youtube_transcript,
     fetch_youtube_transcript,
@@ -122,6 +123,25 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--orientation")
     search.add_argument("--limit", type=int, default=20)
 
+    wiki = subparsers.add_parser("wiki", help="evolve and refine-validate the living wiki")
+    wiki_sub = wiki.add_subparsers(dest="wiki_command", required=True)
+    wiki_evolve = wiki_sub.add_parser(
+        "evolve",
+        help="create/update entity and topic wiki pages from observations (mechanical synthesis)",
+    )
+    wiki_evolve.add_argument(
+        "--observation",
+        action="append",
+        dest="observation_ids",
+        help="limit to observation_id (repeatable)",
+    )
+    wiki_evolve.add_argument("--subject", help="limit to subject ref/label")
+    wiki_evolve.add_argument("--topic", help="limit to topic ref/label")
+    wiki_sub.add_parser(
+        "refine-validate",
+        help="vault validate plus wiki citation/orphan/duplicate findings",
+    )
+
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
 
@@ -164,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
         return _index_command(vault_root, args)
     if args.command == "search":
         return _search_command(vault_root, args)
+    if args.command == "wiki":
+        return _wiki_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -256,6 +278,23 @@ def _search_command(vault_root: Path, args: argparse.Namespace) -> int:
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if result.message == "ok" else 1
+
+
+def _wiki_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.wiki_command == "evolve":
+        result = evolve_wiki(
+            vault_root,
+            observation_ids=args.observation_ids,
+            subject=args.subject,
+            topic=args.topic,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status in {"evolved", "noop"} else 1
+    if args.wiki_command == "refine-validate":
+        result = refine_validate_wiki(vault_root)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.valid else 1
+    return 2
 
 
 def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int:
