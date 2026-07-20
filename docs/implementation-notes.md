@@ -12,4 +12,4 @@ Observation append (`evidence-vault observe`) validates schema and resolvable ev
 
 YouTube transcript fetch (`fetch-transcript`) uses the uv-locked `youtube-transcript-api` package behind an injectable fetcher boundary so unit tests never require network. The downloaded Markdown is ordinary text for the existing ingest adapters; the transcript file is the immutable original (not the video stream).
 
-Mechanical wiki evolve/refine-validate, rebuildable FTS search, and dimensional perspective compare are implemented. LLM extraction and source-gap Q&A exploration (#28) remain open. Semantic `lint` beyond wiki refine-validate remains deferred under #3.
+Mechanical wiki evolve/refine-validate, rebuildable FTS search, dimensional perspective compare, and source-gap explore (`gaps` / `ask` with optional update-queue proposals) are implemented. LLM extraction and full single-writer proposal application (#8) remain open. Semantic `lint` beyond wiki refine-validate remains deferred under #3.

@@ -61,9 +61,20 @@ uv run evidence-vault perspective compare \
 
 ## Query and refine
 
-Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated. There is not yet a wiki compile, wiki refine-validate, or source-gap explorer command; those remain roadmap items (#27, #28).
+Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated.
 
 Automated writers should eventually serialize canonical changes through one maintainer. Until then, place machine-proposed changes in `system/update-queue/` for review.
+
+## Source-gap exploration
+
+```bash
+uv run evidence-vault explore gaps
+uv run evidence-vault explore gaps --topic amphibian --propose
+uv run evidence-vault explore ask "Where were frog calls recorded?"
+uv run evidence-vault explore ask "What is the capital of Mars?" --propose
+```
+
+`explore gaps` lists sources missing observation and/or wiki coverage (anchors include `source_id`, path, linked observation/wiki ids when partial). `explore ask` answers **evidence-first** from source passages (and observations when indexed), with exact citations, or returns `insufficient_evidence` without inventing neutral/wiki consensus. `--propose` writes review-only JSON under `system/update-queue/`; it never publishes wiki, memory, or observations by itself.
 
 ## Wiki evolve and refine-validate
 

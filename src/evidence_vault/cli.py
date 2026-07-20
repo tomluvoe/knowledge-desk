@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from evidence_vault.errors import EvidenceVaultError
+from evidence_vault.explore import explore_ask, explore_gaps
 from evidence_vault.index import rebuild_index, search_index
 from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
 from evidence_vault.observe import append_observation_path, successful as observe_successful
@@ -162,6 +163,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="vault validate plus wiki citation/orphan/duplicate findings",
     )
 
+    explore = subparsers.add_parser(
+        "explore",
+        help="source-gap detection and evidence-first Q&A (proposals stay in update-queue)",
+    )
+    explore_sub = explore.add_subparsers(dest="explore_command", required=True)
+    explore_gaps_cmd = explore_sub.add_parser(
+        "gaps",
+        help="list sources missing observation and/or wiki coverage",
+    )
+    explore_gaps_cmd.add_argument("--source-id", dest="source_id", help="limit to one source_id")
+    explore_gaps_cmd.add_argument("--topic", help="limit to sources related to a topic term")
+    explore_gaps_cmd.add_argument(
+        "--propose",
+        action="store_true",
+        help="write a review-only proposal under system/update-queue/",
+    )
+    explore_ask_cmd = explore_sub.add_parser(
+        "ask",
+        help="answer from source passages with citations, or explicit insufficient evidence",
+    )
+    explore_ask_cmd.add_argument("question", help="natural-language question")
+    explore_ask_cmd.add_argument("--limit", type=int, default=5, help="max citations (default 5)")
+    explore_ask_cmd.add_argument(
+        "--propose",
+        action="store_true",
+        help="write observation stub or open-question proposal to system/update-queue/",
+    )
+
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
 
@@ -206,6 +235,8 @@ def main(argv: list[str] | None = None) -> int:
         return _search_command(vault_root, args)
     if args.command == "wiki":
         return _wiki_command(vault_root, args)
+    if args.command == "explore":
+        return _explore_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -325,6 +356,28 @@ def _wiki_command(vault_root: Path, args: argparse.Namespace) -> int:
         result = refine_validate_wiki(vault_root)
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.valid else 1
+    return 2
+
+
+def _explore_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.explore_command == "gaps":
+        result = explore_gaps(
+            vault_root,
+            source_id=args.source_id,
+            topic=args.topic,
+            propose=args.propose,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "ok" else 1
+    if args.explore_command == "ask":
+        result = explore_ask(
+            vault_root,
+            args.question,
+            limit=args.limit,
+            propose=args.propose,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "answered" else 2
     return 2
 
 
