@@ -4,7 +4,7 @@ All schema contracts use JSON Schema Draft 2020-12 and semantic schema version `
 
 ## Evidence chain
 
-An evidence locator identifies a source, immutable content hash, normalized note, locator kind, and exact selector. Selectors support PDF pages, Markdown headings, line ranges, and blocks. A SHA-256 quote digest may pin the selected text. Validation checks source existence, digest agreement, normalized-path containment, and selector resolution.
+An evidence locator identifies a source, immutable content hash, normalized note, locator kind, and exact selector. Selectors support PDF pages, Markdown headings, line ranges, and blocks. A SHA-256 quote digest may pin the selected text. Validation checks source existence, digest agreement, normalized-path containment, kind/selector agreement, and selector resolution. Standalone locator documents carry `schema_version`; embedded citations under observations, wiki notes, and memory records omit it because the parent artifact owns the schema.
 
 Observations carry separate publication, expression, recording, validity, horizon, and freshness fields. Relations (`confirms`, `contradicts`, `refines`, `supersedes`) point to stable observation IDs. The generic orientation vocabulary is `supportive`, `critical`, `neutral`, `mixed`, `conditional`, or `unknown`; it makes no domain-specific claim.
 

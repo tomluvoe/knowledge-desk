@@ -225,6 +225,126 @@ class RepositoryContractTests(unittest.TestCase):
         example["extensions"] = {"ecology": {"species_code": "invalid-namespace"}}
         self.assertTrue(schema_errors(example, schema))
 
+    def test_locator_kind_must_match_selector_shape(self) -> None:
+        schema = load_schema(REPOSITORY_ROOT, "evidence-locator.schema.json")
+        mismatched = {
+            "schema_version": "1.0.0",
+            "source_id": "src-" + ("a" * 24),
+            "source_hash": "sha256:" + ("a" * 64),
+            "normalized_path": f"sources/src-{'a' * 24}/normalized.md",
+            "locator_kind": "pdf_page",
+            "selector": {"block_id": "block-1"},
+        }
+        self.assertTrue(schema_errors(mismatched, schema))
+
+
+class ObservationValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.vault = Path(self.temporary.name)
+        shutil.copytree(REPOSITORY_ROOT / "system" / "schemas", self.vault / "system" / "schemas")
+        shutil.copytree(REPOSITORY_ROOT / "system" / "examples", self.vault / "system" / "examples")
+        (self.vault / "system" / "logs").mkdir(parents=True)
+        for name in ("sources", "observations", "wiki", "memory", "domains"):
+            (self.vault / name).mkdir()
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def _ingest_text(self, name: str, body: str) -> object:
+        source = self.vault / name
+        source.write_text(body, encoding="utf-8")
+        result = ingest_file(self.vault, source, IngestMetadata())
+        self.assertEqual("created", result.status, result.message)
+        return result
+
+    def test_observation_with_embedded_evidence_passes_vault_validation(self) -> None:
+        result = self._ingest_text(
+            "field-note.txt",
+            "Species X declined by 12 percent in the northern transect.\n",
+        )
+        quote = "Species X declined by 12 percent in the northern transect."
+        observation = {
+            "schema_version": "1.0.0",
+            "observation_id": "obs-20240101-species-x",
+            "subjects": [{"ref_id": "entity-species-x", "kind": "entity", "label": "Species X"}],
+            "topics": [{"ref_id": "topic-population", "kind": "topic", "label": "Population"}],
+            "assertion": "Species X declined by 12 percent.",
+            "epistemic_class": "source_statement",
+            "statement_basis": "explicit_statement",
+            "orientation": "critical",
+            "confidence": 0.9,
+            "reasoning": "Direct statement in source.",
+            "mechanisms": [],
+            "conditions": [],
+            "implications": [],
+            "catalysts": [],
+            "risks": [],
+            "publication_date": "2024-01-01",
+            "expressed_at": "2024-01-01T00:00:00Z",
+            "valid_at": "2024-01-01T00:00:00Z",
+            "recorded_at": "2024-01-02T00:00:00Z",
+            "horizon": None,
+            "freshness": {"as_of": "2024-01-02T00:00:00Z", "status": "historical"},
+            "evidence": [
+                {
+                    "source_id": result.source_id,
+                    "source_hash": result.content_hash,
+                    "normalized_path": result.normalized_path,
+                    "locator_kind": "line_range",
+                    "selector": {"start_line": 1, "end_line": 1},
+                    "quote_sha256": sha256_text(quote),
+                }
+            ],
+            "relations": [],
+            "extensions": {},
+        }
+        path = self.vault / "observations" / "obs-20240101-species-x.json"
+        path.write_text(json.dumps(observation, indent=2) + "\n", encoding="utf-8")
+
+        report = validate_vault(self.vault)
+        self.assertTrue(report.valid, "\n".join(report.errors))
+        self.assertEqual(1, report.checked["observations"])
+
+    def test_embedded_evidence_rejects_schema_version(self) -> None:
+        example = json.loads(
+            (REPOSITORY_ROOT / "system" / "examples" / "observation-ecology.example.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        example["evidence"][0]["schema_version"] = "1.0.0"
+        schema = load_schema(REPOSITORY_ROOT, "observation.schema.json")
+        self.assertTrue(
+            any("schema_version" in error for error in schema_errors(example, schema)),
+            "embedded evidence must not carry schema_version",
+        )
+
+    def test_kind_selector_mismatch_returns_error_not_exception(self) -> None:
+        result = self._ingest_text("note.txt", "plain text line\n")
+        locator = {
+            "schema_version": "1.0.0",
+            "source_id": result.source_id,
+            "source_hash": result.content_hash,
+            "normalized_path": result.normalized_path,
+            "locator_kind": "pdf_page",
+            "selector": {"block_id": "block-1"},
+        }
+        errors = validate_locator(self.vault, locator)
+        self.assertTrue(errors)
+        self.assertFalse(any("KeyError" in error for error in errors))
+
+    def test_embedded_evidence_without_schema_version_resolves(self) -> None:
+        result = self._ingest_text("note.txt", "Exact sentence.\n")
+        locator = {
+            "source_id": result.source_id,
+            "source_hash": result.content_hash,
+            "normalized_path": result.normalized_path,
+            "locator_kind": "line_range",
+            "selector": {"start_line": 1, "end_line": 1},
+            "quote_sha256": sha256_text("Exact sentence."),
+        }
+        self.assertEqual([], validate_locator(self.vault, locator))
+
 
 if __name__ == "__main__":
     unittest.main()

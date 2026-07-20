@@ -33,6 +33,94 @@
   },
   "$defs": {
     "reference": {"type": "object", "additionalProperties": false, "required": ["ref_id", "kind", "label"], "properties": {"ref_id": {"type": "string", "pattern": "^(entity|topic)-[a-z0-9]+(?:-[a-z0-9]+)*$"}, "kind": {"enum": ["entity", "topic"]}, "label": {"type": "string", "minLength": 1}}},
-    "evidence": {"type": "object", "additionalProperties": false, "required": ["source_id", "source_hash", "normalized_path", "locator_kind", "selector"], "properties": {"source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"}, "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"}, "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]}, "selector": {"type": "object"}, "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "source_hash", "normalized_path", "locator_kind", "selector"],
+      "properties": {
+        "source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"},
+        "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"},
+        "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]},
+        "selector": {"type": "object"},
+        "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"locator_kind": {"const": "pdf_page"}}, "required": ["locator_kind"]},
+          "then": {
+            "properties": {
+              "selector": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["page"],
+                "properties": {"page": {"type": "integer", "minimum": 1}}
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"locator_kind": {"const": "markdown_heading"}}, "required": ["locator_kind"]},
+          "then": {
+            "properties": {
+              "selector": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["heading", "occurrence"],
+                "properties": {
+                  "heading": {"type": "string", "minLength": 1},
+                  "occurrence": {"type": "integer", "minimum": 1}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"locator_kind": {"const": "line_range"}}, "required": ["locator_kind"]},
+          "then": {
+            "properties": {
+              "selector": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["start_line", "end_line"],
+                "properties": {
+                  "start_line": {"type": "integer", "minimum": 1},
+                  "end_line": {"type": "integer", "minimum": 1}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"locator_kind": {"const": "block"}}, "required": ["locator_kind"]},
+          "then": {
+            "properties": {
+              "selector": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["block_id"],
+                "properties": {"block_id": {"type": "string", "pattern": "^block-[1-9][0-9]*$"}}
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"locator_kind": {"const": "media_timestamp"}}, "required": ["locator_kind"]},
+          "then": {
+            "properties": {
+              "selector": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["start_seconds"],
+                "properties": {
+                  "start_seconds": {"type": "number", "minimum": 0},
+                  "end_seconds": {"type": "number", "minimum": 0}
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
   }
 }
