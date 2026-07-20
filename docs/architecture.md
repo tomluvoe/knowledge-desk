@@ -7,7 +7,7 @@ Evidence Vault separates durable records from rebuildable access layers.
 3. `observations/` stores atomic, append-only, temporally explicit assertions whose evidence locators resolve back to sources.
 4. `wiki/` stores revisable entity, topic, event, comparison, and synthesis notes.
 5. `memory/` distinguishes user conclusions, decisions, and open questions from source evidence and agent hypotheses.
-6. Future indexes, graphs, embeddings, and read-oriented MCP endpoints are disposable projections.
+6. Indexes, graphs, embeddings, and read-oriented MCP endpoints are disposable projections. The optional SQLite FTS index lives at `system/.index/vault.sqlite` and is fully rebuildable from canonical paths.
 
 External private context belongs in its originating system. A consuming agent may join results from multiple MCP servers at query time; Evidence Vault does not copy portfolio, CRM, calendar, or codebase state by default.
 

@@ -25,6 +25,8 @@ uv run evidence-vault observe path/to/observation.json
 uv run evidence-vault observations list --subject entity-example
 uv run evidence-vault observations get obs-20260718-frog-calls
 uv run evidence-vault perspective at --subject entity-example --topic topic-example --as-of 2024-06-01
+uv run evidence-vault index rebuild
+uv run evidence-vault search "keyword" --layer observation
 uv run evidence-vault validate
 ```
 

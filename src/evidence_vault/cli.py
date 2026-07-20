@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from evidence_vault.errors import EvidenceVaultError
+from evidence_vault.index import rebuild_index, search_index
 from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
 from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
@@ -107,6 +108,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="after writing the transcript file, run evidence-vault ingest on it",
     )
 
+    index = subparsers.add_parser("index", help="manage the disposable rebuildable search index")
+    index_sub = index.add_subparsers(dest="index_command", required=True)
+    index_sub.add_parser("rebuild", help="rebuild SQLite FTS index from canonical vault content")
+
+    search = subparsers.add_parser("search", help="full-text search over the disposable index")
+    search.add_argument("query", help="FTS5 query string")
+    search.add_argument("--layer", choices=["source", "observation", "wiki", "memory"])
+    search.add_argument("--subject", help="filter by subject ref_id substring")
+    search.add_argument("--topic", help="filter by topic ref_id substring")
+    search.add_argument("--source-id", dest="source_id")
+    search.add_argument("--epistemic-class", dest="epistemic_class")
+    search.add_argument("--orientation")
+    search.add_argument("--limit", type=int, default=20)
+
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
 
@@ -145,6 +160,10 @@ def main(argv: list[str] | None = None) -> int:
         return _perspective_command(vault_root, args)
     if args.command == "fetch-transcript":
         return _fetch_transcript_command(vault_root, args)
+    if args.command == "index":
+        return _index_command(vault_root, args)
+    if args.command == "search":
+        return _search_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -213,6 +232,30 @@ def _perspective_command(vault_root: Path, args: argparse.Namespace) -> int:
         )
         return 1
     return 2
+
+
+def _index_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.index_command == "rebuild":
+        result = rebuild_index(vault_root)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "rebuilt" else 1
+    return 2
+
+
+def _search_command(vault_root: Path, args: argparse.Namespace) -> int:
+    result = search_index(
+        vault_root,
+        args.query,
+        layer=args.layer,
+        subject=args.subject,
+        topic=args.topic,
+        source_id=args.source_id,
+        epistemic_class=args.epistemic_class,
+        orientation=args.orientation,
+        limit=args.limit,
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+    return 0 if result.message == "ok" else 1
 
 
 def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int:

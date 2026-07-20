@@ -57,6 +57,18 @@ Read normalized evidence by exact locator, then interpret observations, then con
 
 Automated writers should eventually serialize canonical changes through one maintainer. Until then, place machine-proposed changes in `system/update-queue/` for review.
 
+## Search index
+
+The SQLite FTS5 index under `system/.index/` is disposable derived state. Rebuild anytime:
+
+```bash
+uv run evidence-vault index rebuild
+uv run evidence-vault search "frog calls" --layer observation
+uv run evidence-vault search frog --subject entity-example-wetland
+```
+
+Hits identify `layer` (`source`, `observation`, `wiki`, `memory`) and stable vault ids/paths. Deleting the database loses no durable knowledge; run `index rebuild` after checkout or bulk imports. External MCP/private context is never indexed unless explicitly imported into the vault.
+
 ## Validate and review
 
 Run `evidence-vault validate` and the unit tests. Validation covers schema definitions and examples, IDs, immutable hashes, evidence targets and selectors (including locator-kind vs media-type agreement), dates/enums via schemas, namespace separation, normalized extraction consistency, dangling revision/relation/supersession targets, self-relations, and directed cycles among observation relations or memory supersession links. Semantic lint (near-duplicates, unsupported synthesis prose, stale current-state claims) remains a separate follow-up. Git review is the recovery boundary for high-impact source, observation, wiki, memory, schema, and template changes.
