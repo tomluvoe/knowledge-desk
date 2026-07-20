@@ -5,9 +5,11 @@ import json
 import sys
 from pathlib import Path
 
+from evidence_vault.errors import EvidenceVaultError
 from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
 from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
+from evidence_vault.perspective import perspective_at, perspective_timeline
 from evidence_vault.validation import validate_vault
 
 
@@ -45,7 +47,32 @@ def build_parser() -> argparse.ArgumentParser:
     obs_get = observations_sub.add_parser("get", help="get one observation by observation_id")
     obs_get.add_argument("observation_id")
 
-    obs_graph = observations_sub.add_parser("relations", help="list outgoing relation edges for all observations")
+    observations_sub.add_parser("relations", help="list outgoing relation edges for all observations")
+
+    perspective = subparsers.add_parser("perspective", help="temporal perspective queries over observations")
+    perspective_sub = perspective.add_subparsers(dest="perspective_command", required=True)
+
+    perspective_at_cmd = perspective_sub.add_parser(
+        "at",
+        help="supported perspective for a subject+topic as of a date (unknown if insufficient evidence)",
+    )
+    perspective_at_cmd.add_argument("--subject", required=True, help="subject ref_id or label substring")
+    perspective_at_cmd.add_argument("--topic", required=True, help="topic ref_id or label substring")
+    perspective_at_cmd.add_argument(
+        "--as-of",
+        required=True,
+        dest="as_of",
+        help="date (YYYY-MM-DD) or RFC3339 datetime",
+    )
+
+    perspective_timeline_cmd = perspective_sub.add_parser(
+        "timeline",
+        help="timeline of meaningful observation changes for a subject+topic",
+    )
+    perspective_timeline_cmd.add_argument("--subject", required=True)
+    perspective_timeline_cmd.add_argument("--topic", required=True)
+    perspective_timeline_cmd.add_argument("--from", dest="start", help="range start date/datetime")
+    perspective_timeline_cmd.add_argument("--to", dest="end", help="range end date/datetime")
 
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
@@ -81,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if payload["success"] else 1
     if args.command == "observations":
         return _observations_command(vault_root, args)
+    if args.command == "perspective":
+        return _perspective_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -121,6 +150,33 @@ def _observations_command(vault_root: Path, args: argparse.Namespace) -> int:
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
+    return 2
+
+
+def _perspective_command(vault_root: Path, args: argparse.Namespace) -> int:
+    try:
+        if args.perspective_command == "at":
+            result = perspective_at(vault_root, args.subject, args.topic, args.as_of)
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status != "unknown" else 2
+        if args.perspective_command == "timeline":
+            result = perspective_timeline(vault_root, args.subject, args.topic, start=args.start, end=args.end)
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status != "unknown" else 2
+    except EvidenceVaultError as exc:
+        print(
+            json.dumps(
+                {
+                    "operation": f"perspective.{args.perspective_command}",
+                    "success": False,
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
     return 2
 
 

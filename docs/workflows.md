@@ -22,9 +22,26 @@ uv run evidence-vault observations relations
 
 `list` ANDs filters (`--subject`, `--topic`, `--source-id`, `--orientation`, `--epistemic-class`, `--statement-basis`, `--id-prefix`). Subject and topic match `ref_id` exactly or as a case-insensitive substring of `ref_id`/`label`. Results are sorted by `valid_at` (then `expressed_at` / `recorded_at`) and `observation_id`. `relations` returns the outgoing confirms/contradicts/refines/supersedes graph.
 
+## Perspective at a date
+
+```bash
+uv run evidence-vault perspective at --subject entity-alpha --topic topic-outlook --as-of 2024-06-01
+uv run evidence-vault perspective timeline --subject entity-alpha --topic topic-outlook --from 2024-01-01 --to 2024-12-31
+```
+
+`perspective at` returns the supported view for a subject+topic as of a date or datetime:
+
+- An observation applies only if its effective time (`valid_at`, else `expressed_at` / `publication_date` / `recorded_at`) is on or before `as_of` and any `horizon` still covers that day.
+- Superseded observations that still fall in range are dropped when a superseding observation also applies.
+- No applying observation yields `status=unknown` and `reason=insufficient_evidence` — never a synthetic neutral stance.
+- An observation whose orientation is `unknown` is still `supported` (explicit unknown ≠ missing evidence).
+- Concurrent disagreeing active observations yield `status=conflicted` with the latest primary and `conflicting_observation_ids`.
+
+`perspective timeline` lists introduced/confirms/refines/contradicts/supersedes events in time order. Multi-subject comparison scoring remains a follow-up under #10.
+
 ## Query and refine
 
-Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated. There is not yet a wiki compile, wiki refine-validate, source-gap explorer, or perspective-at-date command; those remain roadmap items (#27, #28, #10).
+Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated. There is not yet a wiki compile, wiki refine-validate, or source-gap explorer command; those remain roadmap items (#27, #28).
 
 Automated writers should eventually serialize canonical changes through one maintainer. Until then, place machine-proposed changes in `system/update-queue/` for review.
 
