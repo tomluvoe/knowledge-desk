@@ -88,6 +88,21 @@ uv run evidence-vault wiki refine-validate
 
 `wiki refine-validate` runs vault `validate` and adds structured findings (severity, path, code, suggested action) for unsupported synthesis, orphan pages, dangling observation ids, empty evidence, duplicate titles, and freshness notes. Loop: observe → evolve → refine-validate → review.
 
+## Read-only MCP server
+
+```bash
+# Local stdio (typical for desktop MCP clients)
+uv run evidence-vault --vault . mcp serve --transport stdio
+
+# Network transport (SSE)
+uv run evidence-vault --vault . mcp serve --transport sse --host 127.0.0.1 --port 8000
+
+# Docker (vault mounted read-only; disposable index under /tmp)
+docker compose up --build
+```
+
+The MCP server is **read-only**: it exposes search, sources, evidence locators, entities/topics, observations, perspective at/timeline/compare, synthesis pages, and explore gaps/ask. It never writes observations, wiki, memory, or update-queue proposals. Set `EVIDENCE_VAULT_ROOT` and optional `EVIDENCE_VAULT_INDEX_PATH` for container deployments. Prefer observation `statement_basis` over wiki prose; missing evidence is `unknown`/`insufficient_evidence`, never neutral fill-in.
+
 ## Search index
 
 The SQLite FTS5 index under `system/.index/` is disposable derived state. Rebuild anytime:

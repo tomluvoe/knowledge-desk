@@ -31,7 +31,15 @@ uv run evidence-vault wiki evolve
 uv run evidence-vault wiki refine-validate
 uv run evidence-vault explore gaps
 uv run evidence-vault explore ask "What does the source say about …?"
+uv run evidence-vault mcp serve --transport stdio
 uv run evidence-vault validate
+```
+
+### Docker MCP (read-only vault mount)
+
+```bash
+docker compose up --build
+# MCP SSE on localhost:8000; bind-mounts this repo read-only at /vault
 ```
 
 Supported bootstrap formats are PDF, Markdown (`.md`, `.markdown`), and UTF-8 plain text (`.txt`). `ingest` prints a JSON operation result suitable for scripts. Metadata can be supplied with `--title`, `--creator`, `--published`, `--url`, and `--language`. Originals are copied byte-for-byte under `sources/<source-id>/original/`; normalized Markdown and a manifest live beside them.
