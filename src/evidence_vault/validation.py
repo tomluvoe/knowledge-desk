@@ -46,8 +46,10 @@ def validate_source_artifacts(vault_root: Path, artifact_dir: Path) -> list[str]
     note_path = artifact_dir / "normalized.md"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return ["manifest.json: missing"]
     except (OSError, json.JSONDecodeError) as exc:
-        return [f"{manifest_path}: unreadable manifest: {exc}"]
+        return [f"manifest.json: unreadable ({type(exc).__name__})"]
     errors.extend(f"manifest {message}" for message in schema_errors(manifest, load_schema(vault_root, "source-manifest.schema.json")))
     if not isinstance(manifest, dict):
         return errors + ["manifest root must be an object"]
@@ -60,8 +62,12 @@ def validate_source_artifacts(vault_root: Path, artifact_dir: Path) -> list[str]
     if artifact_dir.name != source_id:
         errors.append("artifact directory name does not equal source_id")
     original_dir = artifact_dir / "original"
-    originals = list(original_dir.iterdir()) if original_dir.is_dir() else []
-    if len(originals) != 1 or not originals[0].is_file():
+    if not original_dir.is_dir():
+        errors.append("original/: missing directory")
+        originals: list[Path] = []
+    else:
+        originals = [path for path in original_dir.iterdir() if path.is_file()]
+    if len(originals) != 1:
         errors.append("source must contain exactly one immutable original file")
     elif sha256_file(originals[0]) != digest:
         errors.append("immutable original content hash does not match manifest")
@@ -76,8 +82,11 @@ def validate_source_artifacts(vault_root: Path, artifact_dir: Path) -> list[str]
         note_text = note_path.read_text(encoding="utf-8")
         note_metadata, note_body = parse_frontmatter(note_text)
         normalized_content(note_body)
+    except FileNotFoundError:
+        errors.append("normalized.md: missing")
+        return errors
     except (OSError, UnicodeDecodeError, ValueError) as exc:
-        errors.append(f"normalized note is unreadable or incomplete: {exc}")
+        errors.append(f"normalized.md: unreadable or incomplete ({type(exc).__name__})")
         return errors
     errors.extend(
         f"normalized note {message}"
@@ -221,13 +230,25 @@ def validate_vault(vault_root: Path) -> ValidationReport:
         horizon = observation.get("horizon")
         if isinstance(horizon, dict) and horizon.get("start") and horizon.get("end") and horizon["end"] < horizon["start"]:
             errors.append(f"{path.relative_to(vault_root)}: horizon end precedes start")
+    observation_edges: list[tuple[str, str]] = []
     for path, observation in observations:
+        source_observation = observation.get("observation_id")
         for relation in observation.get("relations", []):
             if not isinstance(relation, dict):
                 continue
             target = relation.get("observation_id")
+            if not isinstance(target, str):
+                continue
             if target not in observation_ids:
                 errors.append(f"{path.relative_to(vault_root)}: relation target does not exist: {target}")
+                continue
+            if isinstance(source_observation, str) and target == source_observation:
+                errors.append(f"{path.relative_to(vault_root)}: relation cannot target the same observation")
+                continue
+            if isinstance(source_observation, str):
+                observation_edges.append((source_observation, target))
+    for cycle in _directed_cycles(observation_edges):
+        errors.append(f"observation relation cycle: {' -> '.join(cycle)}")
 
     wiki_ids: set[str] = set()
     for path in sorted((vault_root / "wiki").glob("**/*.md")):
@@ -270,10 +291,22 @@ def validate_vault(vault_root: Path) -> ValidationReport:
         for locator in record.get("evidence", []):
             if isinstance(locator, dict):
                 errors.extend(f"{path.relative_to(vault_root)}: {message}" for message in validate_locator(vault_root, locator))
+    memory_edges: list[tuple[str, str]] = []
     for path, record in memory_records:
         supersedes = record.get("supersedes")
-        if supersedes is not None and supersedes not in memory_ids:
+        memory_id = record.get("memory_id")
+        if supersedes is None:
+            continue
+        if supersedes not in memory_ids:
             errors.append(f"{path.relative_to(vault_root)}: supersedes target does not exist: {supersedes}")
+            continue
+        if isinstance(memory_id, str) and supersedes == memory_id:
+            errors.append(f"{path.relative_to(vault_root)}: supersedes cannot target the same memory record")
+            continue
+        if isinstance(memory_id, str) and isinstance(supersedes, str):
+            memory_edges.append((memory_id, supersedes))
+    for cycle in _directed_cycles(memory_edges):
+        errors.append(f"memory supersession cycle: {' -> '.join(cycle)}")
 
     domain_ids: set[str] = set()
     namespaces: set[str] = set()
@@ -394,14 +427,21 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
         errors.append("evidence source_hash differs from source manifest")
     if locator["normalized_path"] != manifest.get("normalized_path"):
         errors.append("evidence normalized_path differs from source manifest")
+
+    kind = locator["locator_kind"]
+    media_type = manifest.get("media_type")
+    kind_errors = _locator_kind_media_errors(kind, media_type)
+    errors.extend(kind_errors)
+    if kind_errors:
+        return errors
+
     note_path = vault_root / locator["normalized_path"]
     try:
         _, body = parse_frontmatter(note_path.read_text(encoding="utf-8"))
         content = normalized_content(body)
     except (OSError, UnicodeDecodeError, ValueError) as exc:
-        return errors + [f"evidence normalized target is unreadable: {exc}"]
+        return errors + [f"evidence normalized target is unreadable ({type(exc).__name__})"]
 
-    kind = locator["locator_kind"]
     selector = locator.get("selector")
     if not isinstance(selector, dict):
         return errors + ["evidence selector must be an object"]
@@ -462,8 +502,6 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
                 errors.append(f"block locator does not resolve: {block_id}")
             else:
                 selected = match.group(1).strip()
-    elif kind == "media_timestamp":
-        errors.append("media timestamp locators require a future media adapter")
     else:
         errors.append(f"unsupported evidence locator_kind: {kind!r}")
 
@@ -506,3 +544,71 @@ def _heading_sections(content: str, wanted: str) -> list[str]:
                 break
         found.append("\n".join(lines[line_index:end]).strip())
     return found
+
+
+# Locator kinds that are only meaningful for particular source media types.
+# line_range is intentionally media-agnostic: every normalized note has lines.
+LOCATOR_KIND_MEDIA_TYPES: dict[str, frozenset[str]] = {
+    "pdf_page": frozenset({"application/pdf"}),
+    "markdown_heading": frozenset({"text/markdown"}),
+    "block": frozenset({"text/plain"}),
+    "media_timestamp": frozenset(),  # no media adapter yet
+}
+
+
+def _locator_kind_media_errors(kind: object, media_type: object) -> list[str]:
+    if not isinstance(kind, str):
+        return []
+    allowed = LOCATOR_KIND_MEDIA_TYPES.get(kind)
+    if allowed is None:
+        return []
+    if kind == "media_timestamp":
+        return ["media timestamp locators require a future media adapter"]
+    if not isinstance(media_type, str):
+        return [f"evidence locator_kind {kind!r} requires a source media_type"]
+    if media_type not in allowed:
+        allowed_text = ", ".join(sorted(allowed))
+        return [f"evidence locator_kind {kind!r} is incompatible with media_type {media_type!r} (allowed: {allowed_text})"]
+    return []
+
+
+def _directed_cycles(edges: list[tuple[str, str]]) -> list[list[str]]:
+    """Return each simple directed cycle once, as a closed node path (A -> B -> A)."""
+    adjacency: dict[str, list[str]] = {}
+    for source, target in edges:
+        adjacency.setdefault(source, []).append(target)
+        adjacency.setdefault(target, [])
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {node: WHITE for node in adjacency}
+    path: list[str] = []
+    cycles: list[list[str]] = []
+    seen_cycle_keys: set[tuple[str, ...]] = set()
+
+    def visit(node: str) -> None:
+        color[node] = GRAY
+        path.append(node)
+        for neighbor in adjacency.get(node, []):
+            if color.get(neighbor, WHITE) == GRAY:
+                start = path.index(neighbor)
+                cycle_nodes = path[start:]
+                key = _cycle_key(cycle_nodes)
+                if key not in seen_cycle_keys:
+                    seen_cycle_keys.add(key)
+                    cycles.append(cycle_nodes + [neighbor])
+            elif color.get(neighbor, WHITE) == WHITE:
+                visit(neighbor)
+        path.pop()
+        color[node] = BLACK
+
+    for node in sorted(adjacency):
+        if color[node] == WHITE:
+            visit(node)
+    return cycles
+
+
+def _cycle_key(nodes: list[str]) -> tuple[str, ...]:
+    if not nodes:
+        return ()
+    rotate = min(range(len(nodes)), key=lambda index: nodes[index])
+    return tuple(nodes[rotate:] + nodes[:rotate])
