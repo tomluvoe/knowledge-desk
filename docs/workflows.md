@@ -14,4 +14,4 @@ Automated writers should eventually serialize canonical changes through one main
 
 ## Validate and review
 
-Run `evidence-vault validate` and the unit tests. Validation covers schema definitions and examples, IDs, immutable hashes, evidence targets and selectors, dates/enums via schemas, namespace separation, and normalized extraction consistency. Git review is the recovery boundary for high-impact source, observation, wiki, memory, schema, and template changes.
+Run `evidence-vault validate` and the unit tests. Validation covers schema definitions and examples, IDs, immutable hashes, evidence targets and selectors (including locator-kind vs media-type agreement), dates/enums via schemas, namespace separation, normalized extraction consistency, dangling revision/relation/supersession targets, self-relations, and directed cycles among observation relations or memory supersession links. Semantic lint (near-duplicates, unsupported synthesis prose, stale current-state claims) remains a separate follow-up. Git review is the recovery boundary for high-impact source, observation, wiki, memory, schema, and template changes.
