@@ -9,7 +9,13 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
 
-from evidence_vault.util import normalized_content, parse_frontmatter, sha256_file, source_id_for_hash
+from evidence_vault.util import (
+    SCHEMA_VERSION,
+    normalized_content,
+    parse_frontmatter,
+    sha256_file,
+    source_id_for_hash,
+)
 
 
 @dataclass(frozen=True)
@@ -355,19 +361,38 @@ def _validate_markdown_record(
 
 
 def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
+    """Validate a standalone or embedded evidence locator.
+
+    Embedded citations under observations, wiki notes, and memory records omit
+    ``schema_version`` (the parent artifact owns the schema). Standalone locator
+    documents require it. Either form is accepted here.
+    """
     errors: list[str] = []
+    if not isinstance(locator, dict):
+        return ["evidence locator root must be an object"]
+
+    candidate = dict(locator)
+    if "schema_version" not in candidate:
+        candidate["schema_version"] = SCHEMA_VERSION
+
     schema = load_schema(vault_root, "evidence-locator.schema.json")
-    errors.extend(f"evidence locator {message}" for message in schema_errors(locator, schema))
+    errors.extend(f"evidence locator {message}" for message in schema_errors(candidate, schema))
     if errors:
         return errors
+
     source_id = locator["source_id"]
     manifest_path = vault_root / "sources" / source_id / "manifest.json"
     if not manifest_path.is_file():
         return [f"evidence target source does not exist: {source_id}"]
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if locator["source_hash"] != manifest["content_hash"]:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"evidence target source manifest is unreadable: {exc}"]
+    if not isinstance(manifest, dict):
+        return ["evidence target source manifest is not an object"]
+    if locator["source_hash"] != manifest.get("content_hash"):
         errors.append("evidence source_hash differs from source manifest")
-    if locator["normalized_path"] != manifest["normalized_path"]:
+    if locator["normalized_path"] != manifest.get("normalized_path"):
         errors.append("evidence normalized_path differs from source manifest")
     note_path = vault_root / locator["normalized_path"]
     try:
@@ -375,30 +400,47 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
         content = normalized_content(body)
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         return errors + [f"evidence normalized target is unreadable: {exc}"]
+
     kind = locator["locator_kind"]
-    selector = locator["selector"]
+    selector = locator.get("selector")
+    if not isinstance(selector, dict):
+        return errors + ["evidence selector must be an object"]
+
     selected: str | None = None
     if kind == "pdf_page":
-        page = selector["page"]
-        match = re.search(
-            rf"<!-- ev-page:{page} -->\s*(.*?)(?=<a id=\"page-|<!-- ev-content-end -->|\Z)",
-            content,
-            flags=re.DOTALL,
-        )
-        if not match:
-            errors.append(f"PDF page locator does not resolve: {page}")
+        page = selector.get("page")
+        if not isinstance(page, int) or isinstance(page, bool) or page < 1:
+            errors.append("PDF page locator selector.page must be a positive integer")
         else:
-            selected = match.group(1).strip()
+            match = re.search(
+                rf"<!-- ev-page:{page} -->\s*(.*?)(?=<a id=\"page-|<!-- ev-content-end -->|\Z)",
+                content,
+                flags=re.DOTALL,
+            )
+            if not match:
+                errors.append(f"PDF page locator does not resolve: {page}")
+            else:
+                selected = match.group(1).strip()
     elif kind == "markdown_heading":
-        matches = _heading_sections(content, selector["heading"])
-        occurrence = selector["occurrence"]
-        if occurrence > len(matches):
-            errors.append(f"Markdown heading locator does not resolve: {selector['heading']!r} occurrence {occurrence}")
+        heading = selector.get("heading")
+        occurrence = selector.get("occurrence")
+        if not isinstance(heading, str) or not heading:
+            errors.append("Markdown heading locator selector.heading must be a non-empty string")
+        elif not isinstance(occurrence, int) or isinstance(occurrence, bool) or occurrence < 1:
+            errors.append("Markdown heading locator selector.occurrence must be a positive integer")
         else:
-            selected = matches[occurrence - 1]
+            matches = _heading_sections(content, heading)
+            if occurrence > len(matches):
+                errors.append(f"Markdown heading locator does not resolve: {heading!r} occurrence {occurrence}")
+            else:
+                selected = matches[occurrence - 1]
     elif kind == "line_range":
-        start, end = selector["start_line"], selector["end_line"]
-        if end < start:
+        start, end = selector.get("start_line"), selector.get("end_line")
+        if not isinstance(start, int) or isinstance(start, bool) or start < 1:
+            errors.append("line-range locator selector.start_line must be a positive integer")
+        elif not isinstance(end, int) or isinstance(end, bool) or end < 1:
+            errors.append("line-range locator selector.end_line must be a positive integer")
+        elif end < start:
             errors.append("line-range end_line precedes start_line")
         else:
             lines = [line for line in content.splitlines() if not line.startswith("<!-- ev-block")]
@@ -407,18 +449,24 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
             else:
                 selected = "\n".join(lines[start - 1 : end])
     elif kind == "block":
-        block_id = selector["block_id"]
-        match = re.search(
-            rf"<!-- ev-block:{re.escape(block_id)} [^>]*-->\n?(.*?)<!-- ev-block-end:{re.escape(block_id)} [^>]*-->",
-            content,
-            flags=re.DOTALL,
-        )
-        if not match:
-            errors.append(f"block locator does not resolve: {block_id}")
+        block_id = selector.get("block_id")
+        if not isinstance(block_id, str) or not block_id:
+            errors.append("block locator selector.block_id must be a non-empty string")
         else:
-            selected = match.group(1).strip()
+            match = re.search(
+                rf"<!-- ev-block:{re.escape(block_id)} [^>]*-->\n?(.*?)<!-- ev-block-end:{re.escape(block_id)} [^>]*-->",
+                content,
+                flags=re.DOTALL,
+            )
+            if not match:
+                errors.append(f"block locator does not resolve: {block_id}")
+            else:
+                selected = match.group(1).strip()
     elif kind == "media_timestamp":
         errors.append("media timestamp locators require a future media adapter")
+    else:
+        errors.append(f"unsupported evidence locator_kind: {kind!r}")
+
     if selected is not None and "quote_sha256" in locator:
         import hashlib
 
