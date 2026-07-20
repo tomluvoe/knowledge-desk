@@ -10,9 +10,21 @@ The operation hashes first, checks duplicates, extracts in staging, preserves th
 
 Run `evidence-vault observe path/to/observation.json` after the cited sources exist. The document must match `observation.schema.json`, every evidence locator must resolve, and relation targets must already exist. Publication is append-only: a new `observation_id` is created, an identical payload is a no-op, and a conflicting payload for an existing ID is rejected. Later confirmations, refinements, contradictions, or supersessions are new observations that link via `relations`.
 
+## Query observations
+
+```bash
+uv run evidence-vault observations list
+uv run evidence-vault observations list --subject entity-example-wetland --topic amphibian
+uv run evidence-vault observations list --source-id src-…
+uv run evidence-vault observations get obs-20260718-frog-calls
+uv run evidence-vault observations relations
+```
+
+`list` ANDs filters (`--subject`, `--topic`, `--source-id`, `--orientation`, `--epistemic-class`, `--statement-basis`, `--id-prefix`). Subject and topic match `ref_id` exactly or as a case-insensitive substring of `ref_id`/`label`. Results are sorted by `valid_at` (then `expressed_at` / `recorded_at`) and `observation_id`. `relations` returns the outgoing confirms/contradicts/refines/supersedes graph.
+
 ## Query and refine
 
-Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated. There is not yet a wiki compile, wiki refine-validate, or source-gap explorer command; those remain roadmap items.
+Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated. There is not yet a wiki compile, wiki refine-validate, source-gap explorer, or perspective-at-date command; those remain roadmap items (#27, #28, #10).
 
 Automated writers should eventually serialize canonical changes through one maintainer. Until then, place machine-proposed changes in `system/update-queue/` for review.
 
