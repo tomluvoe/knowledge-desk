@@ -53,14 +53,29 @@ def ingest_path(vault_root: Path, input_path: Path, metadata: IngestMetadata) ->
     vault_root = vault_root.resolve()
     input_path = input_path.resolve()
     if input_path.is_dir():
-        files = sorted((path for path in input_path.iterdir() if path.is_file()), key=lambda path: path.name.casefold())
+        # Non-recursive by design. Skip dotfiles (e.g. .DS_Store, .hidden.txt).
+        files = sorted(
+            (
+                path
+                for path in input_path.iterdir()
+                if path.is_file() and not path.name.startswith(".")
+            ),
+            key=lambda path: path.name.casefold(),
+        )
         if not files:
-            return [OperationResult(input_path=str(input_path), message="directory contains no files")]
+            return [OperationResult(input_path=str(input_path), message="directory contains no ingestible files")]
         return [ingest_file(vault_root, path, metadata) for path in files]
     return [ingest_file(vault_root, input_path, metadata)]
 
 
 def ingest_file(vault_root: Path, input_path: Path, metadata: IngestMetadata) -> OperationResult:
+    from evidence_vault.writer import vault_write_lock
+
+    with vault_write_lock(vault_root):
+        return _ingest_file_unlocked(vault_root, input_path, metadata)
+
+
+def _ingest_file_unlocked(vault_root: Path, input_path: Path, metadata: IngestMetadata) -> OperationResult:
     result = OperationResult(input_path=str(input_path))
     staging_parent: Path | None = None
     try:

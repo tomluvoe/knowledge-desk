@@ -72,6 +72,13 @@ def validate_observation_document(vault_root: Path, observation: dict[str, Any])
 
 def append_observation(vault_root: Path, observation: dict[str, Any]) -> ObserveResult:
     """Append an observation if it is new; never rewrite an existing record."""
+    from evidence_vault.writer import vault_write_lock
+
+    with vault_write_lock(vault_root):
+        return _append_observation_unlocked(vault_root, observation)
+
+
+def _append_observation_unlocked(vault_root: Path, observation: dict[str, Any]) -> ObserveResult:
     vault_root = vault_root.resolve()
     result = ObserveResult()
     staging_parent: Path | None = None

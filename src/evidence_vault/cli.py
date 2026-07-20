@@ -14,6 +14,7 @@ from evidence_vault.mcp_server import run_mcp_server
 from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
 from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
+from evidence_vault.proposals import apply_proposal, list_proposals, reject_proposal
 from evidence_vault.validation import validate_vault
 from evidence_vault.wiki import evolve_wiki, refine_validate_wiki
 from evidence_vault.youtube_transcript import (
@@ -205,6 +206,15 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_serve.add_argument("--host", default="127.0.0.1", help="bind host for sse/http (default 127.0.0.1)")
     mcp_serve.add_argument("--port", type=int, default=8000, help="bind port for sse/http (default 8000)")
 
+    proposal = subparsers.add_parser("proposal", help="list/apply/reject review-only update-queue proposals")
+    proposal_sub = proposal.add_subparsers(dest="proposal_command", required=True)
+    proposal_sub.add_parser("list", help="list pending proposals in system/update-queue/")
+    proposal_apply = proposal_sub.add_parser("apply", help="apply a proposal under the single-writer lock")
+    proposal_apply.add_argument("path", type=Path, help="proposal JSON path")
+    proposal_reject = proposal_sub.add_parser("reject", help="reject and archive a proposal")
+    proposal_reject.add_argument("path", type=Path)
+    proposal_reject.add_argument("--reason", help="optional rejection reason")
+
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     subparsers.add_parser(
         "lint",
@@ -261,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
         report = lint_vault(vault_root)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if report.valid else 1
+    if args.command == "proposal":
+        return _proposal_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -380,6 +392,21 @@ def _wiki_command(vault_root: Path, args: argparse.Namespace) -> int:
         result = refine_validate_wiki(vault_root)
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.valid else 1
+    return 2
+
+
+def _proposal_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.proposal_command == "list":
+        print(json.dumps(list_proposals(vault_root), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    if args.proposal_command == "apply":
+        result = apply_proposal(vault_root, args.path)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "applied" else 1
+    if args.proposal_command == "reject":
+        result = reject_proposal(vault_root, args.path, reason=args.reason)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "rejected" else 1
     return 2
 
 

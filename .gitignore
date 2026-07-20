@@ -19,3 +19,4 @@ htmlcov/
 .coverage
 system/.staging/
 system/.index/
+system/.locks/

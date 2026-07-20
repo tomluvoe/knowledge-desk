@@ -132,7 +132,15 @@ Example client config (stdio):
 
 ## Proposed changes and review
 
-Until the single-writer applicator is complete, place agent proposals in `system/update-queue/` (or use `explore … --propose`). Queue files are **not** truth.
+Place agent proposals in `system/update-queue/` (or use `explore … --propose`). Queue files are **not** truth until applied.
+
+```bash
+uv run evidence-vault proposal list
+uv run evidence-vault proposal apply path/to/proposal.json
+uv run evidence-vault proposal reject path/to/proposal.json --reason "…"
+```
+
+Canonical writes (ingest, observe, wiki evolve, proposal apply/reject) take an exclusive lock at `system/.locks/writer.lock`. MCP and query commands remain read-only and do not take the lock.
 
 Review checklist:
 
