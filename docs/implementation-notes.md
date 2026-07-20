@@ -8,4 +8,4 @@ The example domain-pack manifest demonstrates namespace mechanics but is not ins
 
 The bootstrap is one coherent package spanning the repository contract, artifact schemas/layout, ingestion, and the shared validation foundation. Its pull request links issues #4, #14, and #16.
 
-Observation append (`evidence-vault observe`) validates schema and resolvable evidence before publishing under `observations/<observation_id>.json`. It advances #11 and #23 but does not yet extract observations with an LLM, compute perspective timelines (#10), or compile wiki pages (#2). Semantic `lint` remains deferred under #3.
+Observation append (`evidence-vault observe`) validates schema and resolvable evidence before publishing under `observations/<observation_id>.json`. Query helpers (`observations list|get|relations`) and temporal `perspective at|timeline` advance #11 and #10. LLM extraction, multi-subject comparison scoring, wiki compile (#2 / #27), and source-gap Q&A exploration (#28) remain open. Semantic `lint` remains deferred under #3.
