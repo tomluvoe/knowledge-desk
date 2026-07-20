@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -59,6 +60,9 @@ class SearchResult:
 
 
 def index_path(vault_root: Path) -> Path:
+    override = os.environ.get("EVIDENCE_VAULT_INDEX_PATH")
+    if override:
+        return Path(override).expanduser().resolve()
     return vault_root.resolve() / INDEX_RELATIVE_PATH
 
 

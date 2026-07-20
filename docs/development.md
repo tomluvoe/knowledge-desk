@@ -36,3 +36,7 @@ The standardized `dev` dependency group is intentionally empty until a third-par
 ## Continuous integration
 
 GitHub Actions installs the repository-pinned uv release, installs Python 3.12 through uv, checks that the lockfile is current, synchronizes exactly from it, and runs tests plus vault validation offline. Action dependencies are pinned to immutable release commit SHAs.
+
+## Docker
+
+The repository `Dockerfile` uses the pinned Astral uv image matching `tool.uv.required-version`, runs `uv sync --locked --no-dev`, and starts the read-only MCP server. Prefer mounting the vault read-only and setting `EVIDENCE_VAULT_INDEX_PATH` to a writable path outside the mount for disposable FTS rebuilds.

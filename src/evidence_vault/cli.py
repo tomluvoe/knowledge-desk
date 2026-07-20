@@ -9,6 +9,7 @@ from evidence_vault.errors import EvidenceVaultError
 from evidence_vault.explore import explore_ask, explore_gaps
 from evidence_vault.index import rebuild_index, search_index
 from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
+from evidence_vault.mcp_server import run_mcp_server
 from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
 from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
@@ -191,6 +192,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="write observation stub or open-question proposal to system/update-queue/",
     )
 
+    mcp = subparsers.add_parser("mcp", help="read-only MCP server (stdio or network transport)")
+    mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
+    mcp_serve = mcp_sub.add_parser("serve", help="start the read-only MCP server")
+    mcp_serve.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default="stdio",
+        help="MCP transport (default: stdio)",
+    )
+    mcp_serve.add_argument("--host", default="127.0.0.1", help="bind host for sse/http (default 127.0.0.1)")
+    mcp_serve.add_argument("--port", type=int, default=8000, help="bind port for sse/http (default 8000)")
+
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
 
@@ -237,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
         return _wiki_command(vault_root, args)
     if args.command == "explore":
         return _explore_command(vault_root, args)
+    if args.command == "mcp":
+        return _mcp_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -357,6 +372,29 @@ def _wiki_command(vault_root: Path, args: argparse.Namespace) -> int:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.valid else 1
     return 2
+
+
+def _mcp_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.mcp_command != "serve":
+        return 2
+    try:
+        run_mcp_server(
+            vault_root,
+            transport=args.transport,
+            host=args.host,
+            port=args.port,
+        )
+    except EvidenceVaultError as exc:
+        print(
+            json.dumps(
+                {"operation": "mcp.serve", "success": False, "message": str(exc)},
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
+    return 0
 
 
 def _explore_command(vault_root: Path, args: argparse.Namespace) -> int:
