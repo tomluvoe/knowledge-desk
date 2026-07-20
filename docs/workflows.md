@@ -115,6 +115,13 @@ uv run evidence-vault search frog --subject entity-example-wetland
 
 Hits identify `layer` (`source`, `observation`, `wiki`, `memory`) and stable vault ids/paths. Deleting the database loses no durable knowledge; run `index rebuild` after checkout or bulk imports. External MCP/private context is never indexed unless explicitly imported into the vault.
 
-## Validate and review
+## Validate, lint, and review
 
-Run `evidence-vault validate` and the unit tests. Validation covers schema definitions and examples, IDs, immutable hashes, evidence targets and selectors (including locator-kind vs media-type agreement), dates/enums via schemas, namespace separation, normalized extraction consistency, dangling revision/relation/supersession targets, self-relations, and directed cycles among observation relations or memory supersession links. Semantic lint (near-duplicates, unsupported synthesis prose, stale current-state claims) remains a separate follow-up. Git review is the recovery boundary for high-impact source, observation, wiki, memory, schema, and template changes.
+```bash
+uv run evidence-vault validate
+uv run evidence-vault lint
+```
+
+`validate` is deterministic and CI-suitable: schemas, IDs, immutable hashes, evidence targets/selectors (including locator-kind vs media-type), dates/enums, namespace separation, dangling revision/relation/supersession targets, self-relations, and relation/supersession cycles.
+
+`lint` adds structured review findings (`severity`, `path`, `code`, `message`, `suggested_action`, optional `evidence` ids). It includes validate errors, wiki refine-validate issues (unsupported synthesis, orphans, duplicates), unresolved contradiction pairs, stale-current horizon mismatches, and thin agent-inference rationales. Lint **never auto-fixes** content. Quality gates and the offline eval corpus are documented under `tests/corpus/README.md`.
