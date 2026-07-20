@@ -1,0 +1,11 @@
+{
+  "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "event_id": "ing-0123456789abcdef0123456789abcdef",
+  "input_filename": "field-note.txt",
+  "occurred_at": "2026-07-20T10:00:00Z",
+  "operation": "ingest",
+  "schema_version": "1.0.0",
+  "source_id": "src-aaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "created",
+  "warnings": []
+}

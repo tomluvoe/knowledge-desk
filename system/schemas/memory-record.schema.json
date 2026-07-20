@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/memory-record/1.0.0",
+  "title": "User conclusion, decision, or open question",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "memory_id", "kind", "title", "statement", "status", "created_at", "updated_at", "observation_ids", "evidence", "extensions"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "memory_id": {"type": "string", "pattern": "^mem-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "kind": {"enum": ["user_conclusion", "user_decision", "open_question"]},
+    "title": {"type": "string", "minLength": 1},
+    "statement": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "superseded", "resolved", "withdrawn"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "observation_ids": {"type": "array", "items": {"type": "string", "pattern": "^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"}, "uniqueItems": true},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "supersedes": {"type": ["string", "null"], "pattern": "^mem-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "extensions": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"}}
+  },
+  "$defs": {
+    "evidence": {"type": "object", "additionalProperties": false, "required": ["source_id", "source_hash", "normalized_path", "locator_kind", "selector"], "properties": {"source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"}, "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"}, "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]}, "selector": {"type": "object"}, "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "locator_kind": "line_range",
+  "normalized_path": "sources/src-aaaaaaaaaaaaaaaaaaaaaaaa/normalized.md",
+  "schema_version": "1.0.0",
+  "selector": {
+    "end_line": 1,
+    "start_line": 1
+  },
+  "source_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_id": "src-aaaaaaaaaaaaaaaaaaaaaaaa"
+}

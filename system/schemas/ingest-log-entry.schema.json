@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/ingest-log-entry/1.0.0",
+  "title": "Successful ingest operation log entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "occurred_at", "operation", "status", "source_id", "content_hash", "input_filename", "warnings"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "event_id": {"type": "string", "pattern": "^ing-[0-9a-f]{32}$"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "operation": {"const": "ingest"},
+    "status": {"enum": ["created", "revision"]},
+    "source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "input_filename": {"type": "string", "minLength": 1},
+    "warnings": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  }
+}

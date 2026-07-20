@@ -1,0 +1,9 @@
+{
+  "aliases": ["Northern wetland"],
+  "extensions": {},
+  "kind": "entity",
+  "label": "Example wetland",
+  "path": "wiki/entities/example-wetland.md",
+  "ref_id": "entity-example-wetland",
+  "schema_version": "1.0.0"
+}

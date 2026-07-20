@@ -1,0 +1,9 @@
+{
+  "description": "Example extension boundary; not an installed substantive domain pack.",
+  "domain_id": "domain-example-ecology",
+  "extension_schemas": ["domains/example-ecology/schemas/observation-extension.schema.json"],
+  "name": "Example ecology extension",
+  "namespace": "org.example.ecology",
+  "schema_version": "1.0.0",
+  "version": "0.1.0"
+}

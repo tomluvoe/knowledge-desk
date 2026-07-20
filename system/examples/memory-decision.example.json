@@ -1,0 +1,14 @@
+{
+  "created_at": "2026-07-20T11:20:00Z",
+  "evidence": [],
+  "extensions": {},
+  "kind": "user_decision",
+  "memory_id": "mem-20260720-repeat-sampling",
+  "observation_ids": ["obs-20260718-frog-calls"],
+  "schema_version": "1.0.0",
+  "statement": "Repeat the same sampling protocol in autumn before drawing a seasonal conclusion.",
+  "status": "active",
+  "supersedes": null,
+  "title": "Repeat autumn sampling",
+  "updated_at": "2026-07-20T11:20:00Z"
+}

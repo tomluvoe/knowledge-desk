@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/evidence-locator/1.0.0",
+  "title": "Exact evidence locator",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_id", "source_hash", "normalized_path", "locator_kind", "selector"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"},
+    "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"},
+    "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]},
+    "selector": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["page"], "properties": {"page": {"type": "integer", "minimum": 1}}},
+        {"type": "object", "additionalProperties": false, "required": ["heading", "occurrence"], "properties": {"heading": {"type": "string", "minLength": 1}, "occurrence": {"type": "integer", "minimum": 1}}},
+        {"type": "object", "additionalProperties": false, "required": ["start_line", "end_line"], "properties": {"start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}},
+        {"type": "object", "additionalProperties": false, "required": ["block_id"], "properties": {"block_id": {"type": "string", "pattern": "^block-[1-9][0-9]*$"}}},
+        {"type": "object", "additionalProperties": false, "required": ["start_seconds"], "properties": {"start_seconds": {"type": "number", "minimum": 0}, "end_seconds": {"type": "number", "minimum": 0}}}
+      ]
+    },
+    "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

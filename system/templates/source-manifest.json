@@ -1,0 +1,19 @@
+{
+  "canonical_url": null,
+  "content_hash": "sha256:<64-lowercase-hex>",
+  "creator": null,
+  "extensions": {},
+  "extraction_status": "complete",
+  "ingested_at": "<RFC3339 timestamp>",
+  "language": null,
+  "media_type": "text/plain",
+  "normalized_path": "sources/<source-id>/normalized.md",
+  "original_filename": "<filename>",
+  "original_path": "sources/<source-id>/original/<filename>",
+  "publication_date": null,
+  "revision_of": null,
+  "schema_version": "1.0.0",
+  "source_id": "src-<24-lowercase-hex>",
+  "title": "<title>",
+  "warnings": []
+}

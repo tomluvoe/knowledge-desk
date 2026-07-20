@@ -1,0 +1,19 @@
+{
+  "canonical_url": "https://example.org/field-note",
+  "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "creator": "Example Research Group",
+  "extensions": {},
+  "extraction_status": "complete",
+  "ingested_at": "2026-07-20T10:00:00Z",
+  "language": "en",
+  "media_type": "text/plain",
+  "normalized_path": "sources/src-aaaaaaaaaaaaaaaaaaaaaaaa/normalized.md",
+  "original_filename": "field-note.txt",
+  "original_path": "sources/src-aaaaaaaaaaaaaaaaaaaaaaaa/original/field-note.txt",
+  "publication_date": "2026-07-18",
+  "revision_of": null,
+  "schema_version": "1.0.0",
+  "source_id": "src-aaaaaaaaaaaaaaaaaaaaaaaa",
+  "title": "Wetland field note",
+  "warnings": []
+}

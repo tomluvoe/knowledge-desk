@@ -1,0 +1,11 @@
+{
+  "content_hash": "sha256:<64-lowercase-hex>",
+  "event_id": "ing-<32-lowercase-hex>",
+  "input_filename": "<filename>",
+  "occurred_at": "<RFC3339 timestamp>",
+  "operation": "ingest",
+  "schema_version": "1.0.0",
+  "source_id": "src-<24-lowercase-hex>",
+  "status": "created",
+  "warnings": []
+}

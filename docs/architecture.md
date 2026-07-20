@@ -1,0 +1,24 @@
+# Architecture
+
+Evidence Vault separates durable records from rebuildable access layers.
+
+1. `inbox/` receives untrusted candidate files.
+2. `sources/` stores a byte-identical original, a manifest, and readable normalized Markdown under a content-derived stable ID.
+3. `observations/` stores atomic, append-only, temporally explicit assertions whose evidence locators resolve back to sources.
+4. `wiki/` stores revisable entity, topic, event, comparison, and synthesis notes.
+5. `memory/` distinguishes user conclusions, decisions, and open questions from source evidence and agent hypotheses.
+6. Future indexes, graphs, embeddings, and read-oriented MCP endpoints are disposable projections.
+
+External private context belongs in its originating system. A consuming agent may join results from multiple MCP servers at query time; Evidence Vault does not copy portfolio, CRM, calendar, or codebase state by default.
+
+## Identity and immutability
+
+A source ID is `src-` plus the first 24 hexadecimal characters of its SHA-256 content digest. Duplicate bytes therefore map to one source record regardless of filename. A different digest is a different source; ingestion may record it as a revision of an earlier same-named artifact, but never overwrites the earlier record.
+
+Canonical publication is directory-atomic: extraction occurs in a same-filesystem staging directory, all files validate, and the completed directory is renamed into `sources/`. The append-only JSON Lines ingest log is written only after publication. A log-write failure is reported honestly without rolling back valid canonical evidence.
+
+## Adapter boundary
+
+Ingestion adapters return normalized Markdown, extraction status, warnings, and locator metadata. The registry selects adapters by extension. Future HTML, office, audio/video, and transcript adapters can use the same content-derived source identity, manifest, normalized note, and evidence-locator model.
+
+PDF extraction is deterministic text extraction, not OCR. Pages remain distinct. Low-text or image-only documents are marked `needs_ocr`; no missing text is guessed.
