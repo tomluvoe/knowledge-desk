@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -15,8 +15,14 @@ dependencies = [
   "pypdf>=5.0,<7",
 ]
 
+[dependency-groups]
+dev = []
+
 [project.scripts]
 evidence-vault = "evidence_vault.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv]
+required-version = "==0.11.29"
