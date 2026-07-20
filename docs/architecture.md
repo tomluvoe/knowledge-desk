@@ -21,4 +21,6 @@ Canonical publication is directory-atomic: extraction occurs in a same-filesyste
 
 Ingestion adapters return normalized Markdown, extraction status, warnings, and locator metadata. The registry selects adapters by extension. Future HTML, office, audio/video, and transcript adapters can use the same content-derived source identity, manifest, normalized note, and evidence-locator model.
 
+YouTube caption retrieval is a separate **fetch** boundary (`fetch-transcript`), not an ingest adapter: it may use the network, writes a reviewable plain Markdown/text file (typically under `inbox/`), and only becomes canonical evidence after ordinary ingest. Unit tests inject a fake fetcher so offline CI never contacts YouTube.
+
 PDF extraction is deterministic text extraction, not OCR. Pages remain distinct. Low-text or image-only documents are marked `needs_ocr`; no missing text is guessed.

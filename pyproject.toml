@@ -13,6 +13,7 @@ authors = [{ name = "Evidence Vault contributors" }]
 dependencies = [
   "jsonschema>=4.23,<5",
   "pypdf>=5.0,<7",
+  "youtube-transcript-api>=1.0,<2",
 ]
 
 [dependency-groups]
