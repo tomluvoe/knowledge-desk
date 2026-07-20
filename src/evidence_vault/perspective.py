@@ -343,3 +343,189 @@ def _related_edges(primary: dict[str, Any], by_id: dict[str, dict[str, Any]]) ->
         if isinstance(rel_type, str) and isinstance(target, str) and target in by_id:
             edges.append({"type": rel_type, "observation_id": target})
     return edges
+
+
+@dataclass
+class CompareResult:
+    operation: str = "perspective.compare"
+    topic: str = ""
+    as_of: str = ""
+    status: str = "unknown"  # compared | partial | unknown
+    reason: str = ""
+    subjects: list[dict[str, object]] = field(default_factory=list)
+    dimensions: list[dict[str, object]] = field(default_factory=list)
+    agreements: list[str] = field(default_factory=list)
+    disagreements: list[str] = field(default_factory=list)
+    insufficient: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def compare_perspectives(
+    vault_root: Path,
+    subjects: list[str],
+    topic: str,
+    as_of: str | datetime,
+    *,
+    topics: list[str] | None = None,
+) -> CompareResult:
+    """Compare two or more subjects on a topic (or topics) as of a date.
+
+    Returns visible dimensions rather than a single opaque similarity score.
+    Missing evidence is listed under ``insufficient`` — never filled with neutral.
+    """
+    if len(subjects) < 2:
+        raise EvidenceVaultError("compare requires at least two --subject values")
+    topic_list = topics or [topic]
+    if not topic_list or not all(topic_list):
+        raise EvidenceVaultError("compare requires a topic")
+
+    if isinstance(as_of, datetime):
+        as_of_dt = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+        as_of_label = as_of_dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    else:
+        as_of_label = as_of
+        as_of_dt = parse_as_of(as_of)
+
+    # Primary topic drives top-level result; multi-topic expands dimensions.
+    primary_topic = topic_list[0]
+    result = CompareResult(topic=primary_topic if len(topic_list) == 1 else ",".join(topic_list), as_of=as_of_label)
+
+    subject_rows: list[dict[str, object]] = []
+    perspectives: dict[str, dict[str, PerspectiveResult]] = {}
+    for subject in subjects:
+        perspectives[subject] = {}
+        for topic_name in topic_list:
+            perspective = perspective_at(vault_root, subject, topic_name, as_of_dt)
+            perspectives[subject][topic_name] = perspective
+        # Summarize primary topic for subject row.
+        primary = perspectives[subject][primary_topic]
+        subject_rows.append(
+            {
+                "subject": subject,
+                "status": primary.status,
+                "reason": primary.reason,
+                "orientation": primary.orientation,
+                "assertion": primary.assertion,
+                "observation_id": primary.observation_id,
+                "statement_basis": primary.statement_basis,
+                "epistemic_class": primary.epistemic_class,
+                "confidence": primary.confidence,
+                "freshness": primary.freshness,
+            }
+        )
+        if primary.status == "unknown":
+            result.insufficient.append(subject)
+
+    result.subjects = subject_rows
+
+    dimensions: list[dict[str, object]] = []
+    for topic_name in topic_list:
+        for dimension in (
+            "evidence_status",
+            "orientation",
+            "assertion",
+            "statement_basis",
+            "epistemic_class",
+            "confidence",
+            "mechanisms",
+            "conditions",
+            "risks",
+            "implications",
+            "horizon",
+            "freshness_status",
+        ):
+            values: dict[str, object] = {}
+            for subject in subjects:
+                perspective = perspectives[subject][topic_name]
+                values[subject] = _dimension_value(perspective, dimension)
+            agreement = _values_agree(values)
+            dimensions.append(
+                {
+                    "topic": topic_name,
+                    "dimension": dimension,
+                    "values": values,
+                    "agreement": agreement,  # agree | disagree | mixed | insufficient
+                }
+            )
+            label = f"{topic_name}:{dimension}"
+            if agreement == "agree":
+                result.agreements.append(label)
+            elif agreement == "disagree":
+                result.disagreements.append(label)
+            elif agreement == "insufficient":
+                pass  # already tracked per subject
+
+    result.dimensions = dimensions
+    supported = [row for row in subject_rows if row["status"] in {"supported", "conflicted"}]
+    if not supported:
+        result.status = "unknown"
+        result.reason = "insufficient_evidence"
+    elif len(supported) < len(subjects):
+        result.status = "partial"
+        result.reason = "some_subjects_lack_evidence"
+    else:
+        result.status = "compared"
+        result.reason = "dimensions_populated"
+    return result
+
+
+def _dimension_value(perspective: PerspectiveResult, dimension: str) -> object:
+    if perspective.status == "unknown":
+        return None
+    observation = perspective.observation or {}
+    if dimension == "evidence_status":
+        return perspective.status
+    if dimension == "orientation":
+        return perspective.orientation
+    if dimension == "assertion":
+        return perspective.assertion
+    if dimension == "statement_basis":
+        return perspective.statement_basis
+    if dimension == "epistemic_class":
+        return perspective.epistemic_class
+    if dimension == "confidence":
+        return perspective.confidence
+    if dimension == "mechanisms":
+        return list(observation.get("mechanisms") or [])
+    if dimension == "conditions":
+        return list(observation.get("conditions") or [])
+    if dimension == "risks":
+        return list(observation.get("risks") or [])
+    if dimension == "implications":
+        return list(observation.get("implications") or [])
+    if dimension == "horizon":
+        return observation.get("horizon")
+    if dimension == "freshness_status":
+        freshness = perspective.freshness or {}
+        return freshness.get("status")
+    return None
+
+
+def _values_agree(values: dict[str, object]) -> str:
+    present = [(subject, value) for subject, value in values.items() if value is not None]
+    if len(present) < 2:
+        return "insufficient"
+    first = present[0][1]
+    # Normalize lists for comparison.
+    def normalize(value: object) -> object:
+        if isinstance(value, list):
+            return tuple(sorted(str(item) for item in value))
+        if isinstance(value, dict):
+            return json_dumps_stable(value)
+        return value
+
+    first_n = normalize(first)
+    if all(normalize(value) == first_n for _, value in present):
+        return "agree"
+    # Special-case empty lists as agreement with empty.
+    if all(value == [] or value is None for _, value in present):
+        return "agree"
+    return "disagree"
+
+
+def json_dumps_stable(value: object) -> str:
+    import json
+
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)

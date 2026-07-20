@@ -49,7 +49,15 @@ uv run evidence-vault perspective timeline --subject entity-alpha --topic topic-
 - An observation whose orientation is `unknown` is still `supported` (explicit unknown ≠ missing evidence).
 - Concurrent disagreeing active observations yield `status=conflicted` with the latest primary and `conflicting_observation_ids`.
 
-`perspective timeline` lists introduced/confirms/refines/contradicts/supersedes events in time order. Multi-subject comparison scoring remains a follow-up under #10.
+`perspective timeline` lists introduced/confirms/refines/contradicts/supersedes events in time order.
+
+```bash
+uv run evidence-vault perspective compare \
+  --subject entity-alpha --subject entity-beta \
+  --topic topic-outlook --as-of 2024-06-01
+```
+
+`perspective compare` places subjects side-by-side across explicit dimensions (orientation, assertion, statement_basis, mechanisms, risks, horizon, freshness, …). Agreement is per-dimension (`agree` / `disagree` / `insufficient`). There is **no** single opaque similarity score. Subjects without applying observations appear under `insufficient` with status `unknown`, never a synthetic neutral stance.
 
 ## Query and refine
 
