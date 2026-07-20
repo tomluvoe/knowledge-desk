@@ -11,7 +11,7 @@ from pathlib import Path
 from evidence_vault.cli import main
 from evidence_vault.ingest import IngestMetadata, ingest_file
 from evidence_vault.observe import append_observation
-from evidence_vault.perspective import perspective_at, perspective_timeline
+from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -241,6 +241,56 @@ class PerspectiveTests(unittest.TestCase):
         )
         self.assertEqual(1, len(clipped.events))
         self.assertEqual("obs-20240601-alpha-two", clipped.events[0]["observation_id"])
+
+    def test_compare_subjects_dimensional(self) -> None:
+        other = "entity-beta"
+        append_observation(
+            self.vault,
+            self._obs(
+                "obs-20240101-alpha",
+                "Alpha is supportive",
+                valid_at="2024-01-01T00:00:00Z",
+                orientation="supportive",
+                line=1,
+                subject=self.subject,
+            ),
+        )
+        append_observation(
+            self.vault,
+            self._obs(
+                "obs-20240101-beta",
+                "Beta is critical",
+                valid_at="2024-01-01T00:00:00Z",
+                orientation="critical",
+                line=3,
+                subject=other,
+            ),
+        )
+        compared = compare_perspectives(
+            self.vault,
+            [self.subject, other],
+            self.topic,
+            "2024-06-01",
+        )
+        self.assertEqual("compared", compared.status)
+        orientation_dim = next(
+            item for item in compared.dimensions if item["dimension"] == "orientation"
+        )
+        self.assertEqual("disagree", orientation_dim["agreement"])
+        self.assertIn(f"{self.topic}:orientation", compared.disagreements)
+
+        sparse = compare_perspectives(
+            self.vault,
+            [self.subject, "entity-missing"],
+            self.topic,
+            "2024-06-01",
+        )
+        self.assertEqual("partial", sparse.status)
+        self.assertIn("entity-missing", sparse.insufficient)
+        # Must not invent neutral orientation for the missing subject.
+        missing_row = next(row for row in sparse.subjects if row["subject"] == "entity-missing")
+        self.assertEqual("unknown", missing_row["status"])
+        self.assertIsNone(missing_row["orientation"])
 
     def test_cli_perspective_at(self) -> None:
         append_observation(

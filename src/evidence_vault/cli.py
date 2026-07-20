@@ -10,7 +10,7 @@ from evidence_vault.index import rebuild_index, search_index
 from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
 from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
-from evidence_vault.perspective import perspective_at, perspective_timeline
+from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
 from evidence_vault.validation import validate_vault
 from evidence_vault.wiki import evolve_wiki, refine_validate_wiki
 from evidence_vault.youtube_transcript import (
@@ -79,6 +79,26 @@ def build_parser() -> argparse.ArgumentParser:
     perspective_timeline_cmd.add_argument("--topic", required=True)
     perspective_timeline_cmd.add_argument("--from", dest="start", help="range start date/datetime")
     perspective_timeline_cmd.add_argument("--to", dest="end", help="range end date/datetime")
+
+    perspective_compare_cmd = perspective_sub.add_parser(
+        "compare",
+        help="compare two or more subjects on a topic as of a date (dimensional, not a single score)",
+    )
+    perspective_compare_cmd.add_argument(
+        "--subject",
+        action="append",
+        dest="subjects",
+        required=True,
+        help="subject ref_id or label (repeat; at least two)",
+    )
+    perspective_compare_cmd.add_argument(
+        "--topic",
+        action="append",
+        dest="topics",
+        required=True,
+        help="topic ref_id or label (repeat for multi-topic dimensions)",
+    )
+    perspective_compare_cmd.add_argument("--as-of", required=True, dest="as_of")
 
     fetch_transcript = subparsers.add_parser(
         "fetch-transcript",
@@ -239,6 +259,17 @@ def _perspective_command(vault_root: Path, args: argparse.Namespace) -> int:
             result = perspective_timeline(vault_root, args.subject, args.topic, start=args.start, end=args.end)
             print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
             return 0 if result.status != "unknown" else 2
+        if args.perspective_command == "compare":
+            topics = args.topics or []
+            result = compare_perspectives(
+                vault_root,
+                args.subjects,
+                topics[0],
+                args.as_of,
+                topics=topics,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status in {"compared", "partial"} else 2
     except EvidenceVaultError as exc:
         print(
             json.dumps(
