@@ -29,6 +29,8 @@ uv run evidence-vault index rebuild
 uv run evidence-vault search "keyword" --layer observation
 uv run evidence-vault wiki evolve
 uv run evidence-vault wiki refine-validate
+uv run evidence-vault explore gaps
+uv run evidence-vault explore ask "What does the source say about …?"
 uv run evidence-vault validate
 ```
 
