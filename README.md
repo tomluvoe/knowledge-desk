@@ -19,10 +19,13 @@ uv python install 3.12
 uv sync --locked
 uv run evidence-vault ingest path/to/source.pdf
 uv run evidence-vault ingest inbox/
+uv run evidence-vault observe path/to/observation.json
 uv run evidence-vault validate
 ```
 
 Supported bootstrap formats are PDF, Markdown (`.md`, `.markdown`), and UTF-8 plain text (`.txt`). `ingest` prints a JSON operation result suitable for scripts. Metadata can be supplied with `--title`, `--creator`, `--published`, `--url`, and `--language`. Originals are copied byte-for-byte under `sources/<source-id>/original/`; normalized Markdown and a manifest live beside them.
+
+`observe` appends a temporal observation JSON document under `observations/`. It validates the schema, resolves every evidence locator against immutable sources, rejects self-relations and relation cycles, and never rewrites an existing `observation_id` (identical re-submit is a no-op).
 
 To use Obsidian, open the repository root as a vault. All canonical notes are ordinary Markdown; `system/` contains supporting schemas, templates, logs, and queues.
 
