@@ -33,6 +33,7 @@ uv run evidence-vault explore gaps
 uv run evidence-vault explore ask "What does the source say about …?"
 uv run evidence-vault mcp serve --transport stdio
 uv run evidence-vault validate
+uv run evidence-vault lint
 ```
 
 ### Docker MCP (read-only vault mount)

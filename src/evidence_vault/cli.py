@@ -9,6 +9,7 @@ from evidence_vault.errors import EvidenceVaultError
 from evidence_vault.explore import explore_ask, explore_gaps
 from evidence_vault.index import rebuild_index, search_index
 from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
+from evidence_vault.lint import lint_vault
 from evidence_vault.mcp_server import run_mcp_server
 from evidence_vault.observe import append_observation_path, successful as observe_successful
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
@@ -205,6 +206,10 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_serve.add_argument("--port", type=int, default=8000, help="bind port for sse/http (default 8000)")
 
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
+    subparsers.add_parser(
+        "lint",
+        help="structured semantic/structural findings (review suggestions; does not auto-fix)",
+    )
     return parser
 
 
@@ -252,6 +257,10 @@ def main(argv: list[str] | None = None) -> int:
         return _explore_command(vault_root, args)
     if args.command == "mcp":
         return _mcp_command(vault_root, args)
+    if args.command == "lint":
+        report = lint_vault(vault_root)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if report.valid else 1
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
