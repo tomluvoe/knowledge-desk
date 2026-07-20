@@ -57,6 +57,18 @@ Read normalized evidence by exact locator, then interpret observations, then con
 
 Automated writers should eventually serialize canonical changes through one maintainer. Until then, place machine-proposed changes in `system/update-queue/` for review.
 
+## Wiki evolve and refine-validate
+
+```bash
+uv run evidence-vault wiki evolve
+uv run evidence-vault wiki evolve --observation obs-20260718-frog-calls
+uv run evidence-vault wiki refine-validate
+```
+
+`wiki evolve` is a **mechanical** compiler: for each matched observation it creates or updates entity/topic pages under `wiki/entities/` and `wiki/topics/`, citing `observation_ids` and evidence locators, restating assertions without inventing hypotheses. Re-running merges observation sets and refreshes `updated_at` without dropping prior linked ids. High-impact narrative rewrites still belong in review (#8); evolve does not call an LLM.
+
+`wiki refine-validate` runs vault `validate` and adds structured findings (severity, path, code, suggested action) for unsupported synthesis, orphan pages, dangling observation ids, empty evidence, duplicate titles, and freshness notes. Loop: observe → evolve → refine-validate → review.
+
 ## Search index
 
 The SQLite FTS5 index under `system/.index/` is disposable derived state. Rebuild anytime:
