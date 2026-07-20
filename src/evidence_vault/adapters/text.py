@@ -27,6 +27,8 @@ class TextAdapter:
 
     def extract(self, path: Path) -> ExtractionResult:
         text, warnings = decode_utf8(path)
+        if not text.strip():
+            warnings.append("plain text source is empty; normalized content will be empty")
         lines = text.splitlines()
         blocks: list[str] = []
         in_block = False

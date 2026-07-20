@@ -1,8 +1,12 @@
 # Workflows
 
+## Concurrency and single-writer
+
+v0.1 serializes **canonical writes** (ingest publish, observe append, wiki evolve, proposal apply/reject) through an exclusive lock at `system/.locks/writer.lock` (gitignored). Concurrent readers (`validate`, `lint`, `search`, MCP tools) do not take the lock. If a writer cannot acquire the lock within ~30s it fails clearly rather than interleaving publishes.
+
 ## Ingest
 
-Run `evidence-vault ingest <file-or-directory>`. Directory ingestion processes supported files in lexical order and reports unsupported entries without corrupting successful records. Supply known metadata explicitly; ingestion does not infer publication dates or creators from prose.
+Run `evidence-vault ingest <file-or-directory>`. Directory ingestion is **non-recursive**, processes supported files in lexical order, **skips dotfiles**, and reports unsupported entries without corrupting successful records. Empty plain-text files still ingest but carry a warning. Supply known metadata explicitly; ingestion does not infer publication dates or creators from prose.
 
 The operation hashes first, checks duplicates, extracts in staging, preserves the original bytes, writes the manifest and normalized note, validates them, publishes atomically, and appends an ingest-log event. Exit status is nonzero if any requested input fails. JSON output makes no-op, created, revision, and failed states distinguishable.
 
@@ -63,7 +67,13 @@ uv run evidence-vault perspective compare \
 
 Read normalized evidence by exact locator, then interpret observations, then consult wiki synthesis. Cite the most direct layer. A new claim becomes a new observation; never rewrite an old observation to make history cleaner. Wiki pages may be revised when their citations and `updated_at` metadata are updated.
 
-Automated writers should eventually serialize canonical changes through one maintainer. Until then, place machine-proposed changes in `system/update-queue/` for review.
+```bash
+uv run evidence-vault proposal list
+uv run evidence-vault proposal apply system/update-queue/explore-ask-….json
+uv run evidence-vault proposal reject system/update-queue/….json --reason "not ready"
+```
+
+Proposals under `system/update-queue/` are review-only. `proposal apply` runs under the writer lock, may append observations or memory open questions when complete, and archives JSON under `system/update-queue/applied/` (or `rejected/`). Incomplete observation stubs with `entity-todo` / `topic-todo` are skipped until edited.
 
 ## Source-gap exploration
 

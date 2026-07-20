@@ -82,6 +82,24 @@ def evolve_wiki(
 
     LLM-assisted prose is out of scope: pages cite observations and restate assertions.
     """
+    from evidence_vault.writer import vault_write_lock
+
+    with vault_write_lock(vault_root):
+        return _evolve_wiki_unlocked(
+            vault_root,
+            observation_ids=observation_ids,
+            subject=subject,
+            topic=topic,
+        )
+
+
+def _evolve_wiki_unlocked(
+    vault_root: Path,
+    *,
+    observation_ids: list[str] | None = None,
+    subject: str | None = None,
+    topic: str | None = None,
+) -> WikiEvolveResult:
     vault_root = vault_root.resolve()
     result = WikiEvolveResult()
     try:
