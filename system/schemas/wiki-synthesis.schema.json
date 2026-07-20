@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/wiki-synthesis/1.0.0",
+  "title": "Wiki synthesis metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "wiki_id", "kind", "title", "created_at", "updated_at", "observation_ids", "evidence", "freshness", "extensions"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "wiki_id": {"type": "string", "pattern": "^wiki-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "kind": {"enum": ["topic", "entity", "event", "comparison", "synthesis"]},
+    "title": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "observation_ids": {"type": "array", "items": {"type": "string", "pattern": "^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"}, "uniqueItems": true},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "freshness": {"enum": ["current", "stale", "historical", "unknown"]},
+    "extensions": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"}}
+  },
+  "$defs": {
+    "evidence": {"type": "object", "additionalProperties": false, "required": ["source_id", "source_hash", "normalized_path", "locator_kind", "selector"], "properties": {"source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"}, "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"}, "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]}, "selector": {"type": "object"}, "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+  }
+}

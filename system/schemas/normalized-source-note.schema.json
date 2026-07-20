@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/normalized-source-note/1.0.0",
+  "title": "Normalized source note front matter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_id", "content_hash", "media_type", "title", "creator", "publication_date", "ingested_at", "canonical_url", "language", "extraction_status", "warnings"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "media_type": {"enum": ["application/pdf", "text/markdown", "text/plain"]},
+    "title": {"type": ["string", "null"]},
+    "creator": {"type": ["string", "null"]},
+    "publication_date": {"type": ["string", "null"], "format": "date"},
+    "ingested_at": {"type": "string", "format": "date-time"},
+    "canonical_url": {"type": ["string", "null"], "format": "uri"},
+    "language": {"type": ["string", "null"], "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"},
+    "extraction_status": {"enum": ["complete", "partial", "needs_ocr"]},
+    "warnings": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "page_count": {"type": "integer", "minimum": 1}
+  }
+}

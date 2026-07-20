@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evidence-vault"
+version = "0.1.0"
+description = "A local-first, model-independent evidence repository"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Evidence Vault contributors" }]
+dependencies = [
+  "jsonschema>=4.23,<5",
+  "pypdf>=5.0,<7",
+]
+
+[project.scripts]
+evidence-vault = "evidence_vault.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

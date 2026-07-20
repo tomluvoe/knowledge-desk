@@ -1,0 +1,34 @@
+{
+  "assertion": "Frog calls were recorded at three sampling points.",
+  "catalysts": ["Additional nocturnal sampling"],
+  "conditions": ["The recording protocol was applied consistently"],
+  "confidence": 0.92,
+  "epistemic_class": "source_statement",
+  "evidence": [
+    {
+      "locator_kind": "line_range",
+      "normalized_path": "sources/src-aaaaaaaaaaaaaaaaaaaaaaaa/normalized.md",
+      "selector": {"end_line": 1, "start_line": 1},
+      "source_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_id": "src-aaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "expressed_at": "2026-07-18T20:00:00Z",
+  "extensions": {"org.example.ecology": {"sampling_method": "acoustic"}},
+  "freshness": {"as_of": "2026-07-18T20:00:00Z", "status": "historical"},
+  "horizon": {"description": "The sampling evening", "end": "2026-07-18", "start": "2026-07-18"},
+  "implications": ["The sites had detectable frog activity during sampling"],
+  "mechanisms": ["Acoustic detection"],
+  "observation_id": "obs-20260718-frog-calls",
+  "orientation": "supportive",
+  "publication_date": "2026-07-18",
+  "reasoning": "This restates the recorded field observation without inferring abundance.",
+  "recorded_at": "2026-07-20T10:05:00Z",
+  "relations": [],
+  "risks": ["Calls do not establish population size"],
+  "schema_version": "1.0.0",
+  "statement_basis": "explicit_statement",
+  "subjects": [{"kind": "entity", "label": "Example wetland", "ref_id": "entity-example-wetland"}],
+  "topics": [{"kind": "topic", "label": "Amphibian activity", "ref_id": "topic-amphibian-activity"}],
+  "valid_at": "2026-07-18T20:00:00Z"
+}

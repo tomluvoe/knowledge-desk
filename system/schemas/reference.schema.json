@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/reference/1.0.0",
+  "title": "Entity or topic reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ref_id", "kind", "label", "path"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "ref_id": {"type": "string", "pattern": "^(entity|topic)-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "kind": {"enum": ["entity", "topic"]},
+    "label": {"type": "string", "minLength": 1},
+    "path": {"type": "string", "pattern": "^wiki/(entities|topics)/[^/]+\\.md$"},
+    "aliases": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "extensions": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"}}
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evidence-vault.local/schemas/observation/1.0.0",
+  "title": "Generic temporal observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "observation_id", "subjects", "topics", "assertion", "epistemic_class", "statement_basis", "orientation", "confidence", "reasoning", "mechanisms", "conditions", "implications", "catalysts", "risks", "publication_date", "expressed_at", "valid_at", "recorded_at", "horizon", "freshness", "evidence", "relations", "extensions"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "observation_id": {"type": "string", "pattern": "^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "subjects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/reference"}, "uniqueItems": true},
+    "topics": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/reference"}, "uniqueItems": true},
+    "assertion": {"type": "string", "minLength": 1},
+    "epistemic_class": {"enum": ["source_statement", "cross_source_synthesis", "agent_hypothesis", "user_conclusion", "user_decision"]},
+    "statement_basis": {"enum": ["explicit_statement", "disclosed_action", "hypothetical_example", "agent_inference"]},
+    "orientation": {"enum": ["supportive", "critical", "neutral", "mixed", "conditional", "unknown"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "reasoning": {"type": "string"},
+    "mechanisms": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "conditions": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "implications": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "catalysts": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "risks": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "publication_date": {"type": ["string", "null"], "format": "date"},
+    "expressed_at": {"type": ["string", "null"], "format": "date-time"},
+    "valid_at": {"type": ["string", "null"], "format": "date-time"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "horizon": {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["start", "end", "description"], "properties": {"start": {"type": ["string", "null"], "format": "date"}, "end": {"type": ["string", "null"], "format": "date"}, "description": {"type": ["string", "null"]}}}]},
+    "freshness": {"type": "object", "additionalProperties": false, "required": ["as_of", "status"], "properties": {"as_of": {"type": ["string", "null"], "format": "date-time"}, "status": {"enum": ["current", "stale", "historical", "unknown"]}}},
+    "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}},
+    "relations": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["type", "observation_id"], "properties": {"type": {"enum": ["confirms", "contradicts", "refines", "supersedes"]}, "observation_id": {"type": "string", "pattern": "^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"}}}, "uniqueItems": true},
+    "extensions": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"}}
+  },
+  "$defs": {
+    "reference": {"type": "object", "additionalProperties": false, "required": ["ref_id", "kind", "label"], "properties": {"ref_id": {"type": "string", "pattern": "^(entity|topic)-[a-z0-9]+(?:-[a-z0-9]+)*$"}, "kind": {"enum": ["entity", "topic"]}, "label": {"type": "string", "minLength": 1}}},
+    "evidence": {"type": "object", "additionalProperties": false, "required": ["source_id", "source_hash", "normalized_path", "locator_kind", "selector"], "properties": {"source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"}, "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"}, "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]}, "selector": {"type": "object"}, "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+  }
+}

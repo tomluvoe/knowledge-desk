@@ -1,0 +1,34 @@
+{
+  "assertion": "The letter describes the bridge as unfinished on its stated date.",
+  "catalysts": ["Discovery of construction records"],
+  "conditions": ["The letter date and transcription are accurate"],
+  "confidence": 0.84,
+  "epistemic_class": "source_statement",
+  "evidence": [
+    {
+      "locator_kind": "markdown_heading",
+      "normalized_path": "sources/src-bbbbbbbbbbbbbbbbbbbbbbbb/normalized.md",
+      "selector": {"heading": "Letter transcription", "occurrence": 1},
+      "source_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_id": "src-bbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "expressed_at": "1894-03-12T12:00:00Z",
+  "extensions": {"org.example.history": {"document_genre": "letter"}},
+  "freshness": {"as_of": null, "status": "historical"},
+  "horizon": null,
+  "implications": ["Completion occurred after the letter's stated date if the account is reliable"],
+  "mechanisms": [],
+  "observation_id": "obs-18940312-bridge-status",
+  "orientation": "neutral",
+  "publication_date": null,
+  "reasoning": "The observation preserves what the document says and does not infer an exact completion date.",
+  "recorded_at": "2026-07-20T10:10:00Z",
+  "relations": [],
+  "risks": ["The writer may have had incomplete information"],
+  "schema_version": "1.0.0",
+  "statement_basis": "explicit_statement",
+  "subjects": [{"kind": "entity", "label": "Example River Bridge", "ref_id": "entity-example-river-bridge"}],
+  "topics": [{"kind": "topic", "label": "Infrastructure history", "ref_id": "topic-infrastructure-history"}],
+  "valid_at": "1894-03-12T12:00:00Z"
+}

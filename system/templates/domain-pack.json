@@ -1,0 +1,9 @@
+{
+  "description": "<domain extension purpose>",
+  "domain_id": "domain-<slug>",
+  "extension_schemas": [],
+  "name": "<name>",
+  "namespace": "org.example.<domain>",
+  "schema_version": "1.0.0",
+  "version": "0.1.0"
+}

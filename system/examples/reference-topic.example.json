@@ -1,0 +1,9 @@
+{
+  "aliases": ["Amphibian detection"],
+  "extensions": {},
+  "kind": "topic",
+  "label": "Amphibian activity",
+  "path": "wiki/topics/amphibian-activity.md",
+  "ref_id": "topic-amphibian-activity",
+  "schema_version": "1.0.0"
+}
