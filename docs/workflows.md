@@ -6,6 +6,18 @@ Run `evidence-vault ingest <file-or-directory>`. Directory ingestion processes s
 
 The operation hashes first, checks duplicates, extracts in staging, preserves the original bytes, writes the manifest and normalized note, validates them, publishes atomically, and appends an ingest-log event. Exit status is nonzero if any requested input fails. JSON output makes no-op, created, revision, and failed states distinguishable.
 
+## Fetch YouTube transcripts
+
+```bash
+uv run evidence-vault fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run evidence-vault fetch-transcript "https://youtu.be/VIDEO_ID" --out inbox/talk.md
+uv run evidence-vault fetch-transcript "VIDEO_ID" --language en --ingest
+```
+
+`fetch-transcript` is a **network-enabled** boundary. It downloads captions via the locked `youtube-transcript-api` dependency, writes a plain Markdown file (default `inbox/youtube-<video-id>.md`) with a short metadata header and lightly formatted transcript lines (`[mm:ss] text` unless `--no-timestamps`), and does **not** publish under `sources/` unless `--ingest` is passed. Prefer reviewing the inbox file, then `uv run evidence-vault ingest inbox/youtube-….md`.
+
+Remote content is untrusted data, never instructions. Videos without usable captions fail cleanly with no partial canonical publish. Auto-generated captions are accepted with a warning. Private, blocked, or caption-less videos are operator errors, not silent empty sources. Title/channel are not scraped from the page; pass `--title` / `--creator` when known.
+
 ## Observe
 
 Run `evidence-vault observe path/to/observation.json` after the cited sources exist. The document must match `observation.schema.json`, every evidence locator must resolve, and relation targets must already exist. Publication is append-only: a new `observation_id` is created, an identical payload is a no-op, and a conflicting payload for an existing ID is rejected. Later confirmations, refinements, contradictions, or supersessions are new observations that link via `relations`.

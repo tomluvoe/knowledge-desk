@@ -11,6 +11,10 @@ from evidence_vault.observe import append_observation_path, successful as observ
 from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
 from evidence_vault.perspective import perspective_at, perspective_timeline
 from evidence_vault.validation import validate_vault
+from evidence_vault.youtube_transcript import (
+    fetch_and_ingest_youtube_transcript,
+    fetch_youtube_transcript,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,6 +78,35 @@ def build_parser() -> argparse.ArgumentParser:
     perspective_timeline_cmd.add_argument("--from", dest="start", help="range start date/datetime")
     perspective_timeline_cmd.add_argument("--to", dest="end", help="range end date/datetime")
 
+    fetch_transcript = subparsers.add_parser(
+        "fetch-transcript",
+        help="download a YouTube transcript as plain Markdown under inbox/ (optional --ingest)",
+    )
+    fetch_transcript.add_argument("url", help="YouTube URL or 11-character video id")
+    fetch_transcript.add_argument(
+        "--out",
+        type=Path,
+        help="output path (default: inbox/youtube-<video-id>.md)",
+    )
+    fetch_transcript.add_argument(
+        "--language",
+        action="append",
+        dest="languages",
+        help="preferred caption language code; repeatable, descending priority (default: en)",
+    )
+    fetch_transcript.add_argument("--title", help="optional document title")
+    fetch_transcript.add_argument("--creator", help="optional creator for ingest metadata")
+    fetch_transcript.add_argument(
+        "--no-timestamps",
+        action="store_true",
+        help="omit [mm:ss] prefixes from transcript lines",
+    )
+    fetch_transcript.add_argument(
+        "--ingest",
+        action="store_true",
+        help="after writing the transcript file, run evidence-vault ingest on it",
+    )
+
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     return parser
 
@@ -110,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         return _observations_command(vault_root, args)
     if args.command == "perspective":
         return _perspective_command(vault_root, args)
+    if args.command == "fetch-transcript":
+        return _fetch_transcript_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -178,6 +213,36 @@ def _perspective_command(vault_root: Path, args: argparse.Namespace) -> int:
         )
         return 1
     return 2
+
+
+def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int:
+    languages = args.languages or ["en"]
+    if args.ingest:
+        result = fetch_and_ingest_youtube_transcript(
+            vault_root,
+            args.url,
+            output_path=args.out,
+            languages=languages,
+            include_timestamps=not args.no_timestamps,
+            title=args.title,
+            creator=args.creator,
+            language=languages[0] if languages else None,
+        )
+    else:
+        result = fetch_youtube_transcript(
+            vault_root,
+            args.url,
+            output_path=args.out,
+            languages=languages,
+            include_timestamps=not args.no_timestamps,
+            title=args.title,
+        )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+    if result.status != "created":
+        return 1
+    if args.ingest and not (result.ingest or {}).get("success"):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

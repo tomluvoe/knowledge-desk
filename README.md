@@ -19,6 +19,8 @@ uv python install 3.12
 uv sync --locked
 uv run evidence-vault ingest path/to/source.pdf
 uv run evidence-vault ingest inbox/
+uv run evidence-vault fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run evidence-vault fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --ingest
 uv run evidence-vault observe path/to/observation.json
 uv run evidence-vault observations list --subject entity-example
 uv run evidence-vault observations get obs-20260718-frog-calls
