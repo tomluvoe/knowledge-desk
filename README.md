@@ -8,7 +8,7 @@ The durable evidence chain is:
 inbox -> original + normalized source -> temporal observation -> wiki synthesis
 ```
 
-Generated indexes and future MCP views sit downstream and must always be rebuildable. See [the architecture](docs/architecture.md), [artifact model](docs/artifact-model.md), [development workflow](docs/development.md), [implementation notes](docs/implementation-notes.md), and the authoritative [agent contract](AGENTS.md).
+Generated indexes and MCP views sit downstream and must always be rebuildable. Start with the [operator guide](docs/operator-guide.md) for day-to-day use; see also [architecture](docs/architecture.md), [artifact model](docs/artifact-model.md), [workflows](docs/workflows.md), [development](docs/development.md), [implementation notes](docs/implementation-notes.md), and the authoritative [agent contract](AGENTS.md).
 
 ## Install and use
 
@@ -46,7 +46,7 @@ Supported bootstrap formats are PDF, Markdown (`.md`, `.markdown`), and UTF-8 pl
 
 `observe` appends a temporal observation JSON document under `observations/`. It validates the schema, resolves every evidence locator against immutable sources, rejects self-relations and relation cycles, and never rewrites an existing `observation_id` (identical re-submit is a no-op).
 
-To use Obsidian, open the repository root as a vault. All canonical notes are ordinary Markdown; `system/` contains supporting schemas, templates, logs, and queues.
+**Obsidian is optional:** open the repository root as a vault to browse Markdown notes. All canonical notes are ordinary files; `system/` holds schemas, templates, logs, and queues. See the [operator guide](docs/operator-guide.md) for ingest, layers, MCP, Git, privacy, and backup.
 
 ## Development
 
@@ -59,4 +59,4 @@ uv run --offline --no-sync evidence-vault validate
 
 See [development](docs/development.md) before adding or upgrading a dependency. `pyproject.toml` is the human-maintained declaration; the committed `uv.lock` is the reproducible resolution and must change in the same review.
 
-This bootstrap intentionally defers LLM observation extraction, wiki compilation, derived search indexes, an MCP server, a containerized maintainer, substantive domain packs, OCR execution, and controlled conversational writes. Their interfaces and safety boundaries are documented, but they are not claimed as implemented.
+Still deferred or partial: LLM-assisted observation extraction, full single-writer proposal application, OCR/STT when captions are missing, substantive domain packs, and containerized maintainers.
