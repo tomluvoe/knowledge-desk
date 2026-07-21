@@ -34,6 +34,8 @@ def create_mcp_server(
             "Read-only Knowledge Desk MCP. Prefer sources and observations over wiki synthesis. "
             "Never treat missing evidence as neutral; status unknown means insufficient evidence. "
             "Do not present agent_inference as explicit_statement. "
+            "Cross-MCP: do not copy private external state into the vault; join external MCP "
+            "facts at query time via compose_with_external / compose_contract (see docs/cross-mcp.md). "
             f"Vault root: {root}"
         ),
         host=host,
@@ -177,6 +179,49 @@ def create_mcp_server(
                 source_id=source_id,
             )
         )
+
+    @server.tool(
+        name="compose_contract",
+        description=(
+            "Cross-MCP composition contract: how to join external MCP context with this vault "
+            "without storing private external state. Domain-neutral."
+        ),
+    )
+    def compose_contract() -> str:
+        from knowledge_desk.composition import composition_contract
+
+        return _json(composition_contract())
+
+    @server.tool(
+        name="compose_with_external",
+        description=(
+            "Join caller-supplied external MCP claims (JSON) with vault perspective/ask results. "
+            "Read-only: never writes external state into the vault. "
+            "Stamp each external fact with origin + epistemic (explicit|inferred|unknown)."
+        ),
+    )
+    def compose_with_external(
+        question: str,
+        external_context_json: str = "[]",
+        subject: str | None = None,
+        topic: str | None = None,
+        as_of: str | None = None,
+        include_ask: bool = True,
+        ask_limit: int = 5,
+    ) -> str:
+        from knowledge_desk.composition import compose_with_vault
+
+        bundle = compose_with_vault(
+            root,
+            question=question,
+            external_context=external_context_json,
+            subject=subject,
+            topic=topic,
+            as_of=as_of,
+            include_ask=include_ask,
+            ask_limit=ask_limit,
+        )
+        return _json(bundle.to_dict())
 
     return server
 

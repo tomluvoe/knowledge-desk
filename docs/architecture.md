@@ -9,7 +9,7 @@ Knowledge Desk separates durable records from rebuildable access layers.
 5. `memory/` distinguishes user conclusions, decisions, and open questions from source evidence and agent hypotheses.
 6. Indexes, graphs, embeddings, and read-oriented MCP endpoints are disposable projections. The optional SQLite FTS index lives at `system/.index/vault.sqlite` and is fully rebuildable from canonical paths.
 
-External private context belongs in its originating system. A consuming agent may join results from multiple MCP servers at query time; Knowledge Desk does not copy portfolio, CRM, calendar, or codebase state by default.
+External private context belongs in its originating system. A consuming agent may join results from multiple MCP servers at query time; Knowledge Desk does not copy portfolio, CRM, calendar, or codebase state by default. See [cross-mcp.md](cross-mcp.md) for the composition contract, claim envelope, CLI/MCP join tools, and worked examples (`compose contract`, `compose join`, MCP `compose_with_external`).
 
 ## Identity and immutability
 

@@ -219,7 +219,22 @@ uv run knowledge-desk --vault . mcp serve --transport sse --host 127.0.0.1 --por
 docker compose up --build
 ```
 
-The MCP server is **read-only**: it exposes search, sources, evidence locators, entities/topics, observations, perspective at/timeline/compare, synthesis pages, and explore gaps/ask. It never writes observations, wiki, memory, or update-queue proposals. Set `KNOWLEDGE_DESK_ROOT` and optional `KNOWLEDGE_DESK_INDEX_PATH` for container deployments. Prefer observation `statement_basis` over wiki prose; missing evidence is `unknown`/`insufficient_evidence`, never neutral fill-in.
+The MCP server is **read-only**: it exposes search, sources, evidence locators, entities/topics, observations, perspective at/timeline/compare, synthesis pages, explore gaps/ask, and cross-MCP composition helpers (`compose_contract`, `compose_with_external`). It never writes observations, wiki, memory, or update-queue proposals. Set `KNOWLEDGE_DESK_ROOT` and optional `KNOWLEDGE_DESK_INDEX_PATH` for container deployments. Prefer observation `statement_basis` over wiki prose; missing evidence is `unknown`/`insufficient_evidence`, never neutral fill-in.
+
+## Cross-MCP composition
+
+Join external MCP context with vault evidence **at query time** without storing private external state:
+
+```bash
+uv run knowledge-desk compose contract
+uv run knowledge-desk compose join "How does external context relate to this topic?" \
+  --external path/to/external-claims.json \
+  --subject entity-example \
+  --topic topic-example \
+  --as-of 2026-07-18
+```
+
+Full recipe, claim envelope, and worked example: [cross-mcp.md](cross-mcp.md).
 
 ## Search index
 
