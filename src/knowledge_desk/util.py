@@ -55,6 +55,24 @@ def write_json_synced(path: Path, value: Any) -> None:
     write_text_synced(path, json_text(value))
 
 
+def confined_file(root: Path, candidate: Path) -> Path | None:
+    """Resolve an existing file only when its real path stays under root."""
+    lexical_root = root.absolute()
+    try:
+        root = lexical_root.resolve(strict=True)
+    except OSError:
+        return None
+    if root != lexical_root:
+        return None
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError:
+        return None
+    if not resolved.is_file() or not resolved.is_relative_to(root):
+        return None
+    return resolved
+
+
 def render_frontmatter(metadata: dict[str, Any]) -> str:
     lines = ["---"]
     for key, value in metadata.items():

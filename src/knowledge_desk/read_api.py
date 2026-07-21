@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,13 +10,19 @@ from knowledge_desk.explore import explore_ask, explore_gaps
 from knowledge_desk.index import rebuild_index, search_index
 from knowledge_desk.observations import ObservationQuery, get_observation, list_observations
 from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
-from knowledge_desk.util import normalized_content, parse_frontmatter
+from knowledge_desk.util import confined_file, normalized_content, parse_frontmatter
 from knowledge_desk.validation import validate_locator
 
 
 MAX_LIMIT = 50
 MAX_TEXT = 4000
 API_VERSION = "1.0.0"
+SOURCE_ID_PATTERN = re.compile(r"^src-[0-9a-f]{24}$")
+OBSERVATION_ID_PATTERN = re.compile(r"^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+REFERENCE_PATTERNS = {
+    "entity": re.compile(r"^entity-[a-z0-9]+(?:-[a-z0-9]+)*$"),
+    "topic": re.compile(r"^topic-[a-z0-9]+(?:-[a-z0-9]+)*$"),
+}
 
 
 def _bound_limit(limit: int | None, default: int = 20) -> int:
@@ -83,7 +90,23 @@ def search(
 
 def get_source(vault_root: Path, source_id: str) -> dict[str, Any]:
     vault_root = vault_root.resolve()
-    manifest_path = vault_root / "sources" / source_id / "manifest.json"
+    if not SOURCE_ID_PATTERN.fullmatch(source_id):
+        return {
+            "api_version": API_VERSION,
+            "success": False,
+            "source_id": source_id,
+            "message": "invalid source_id",
+        }
+    sources_root = vault_root / "sources"
+    source_root = sources_root / source_id
+    manifest_path = confined_file(sources_root, source_root / "manifest.json")
+    if manifest_path is None:
+        return {
+            "api_version": API_VERSION,
+            "success": False,
+            "source_id": source_id,
+            "message": "source not found",
+        }
     manifest = _load_json(manifest_path)
     if manifest is None:
         return {
@@ -92,7 +115,24 @@ def get_source(vault_root: Path, source_id: str) -> dict[str, Any]:
             "source_id": source_id,
             "message": "source not found",
         }
-    note_path = vault_root / str(manifest.get("normalized_path") or f"sources/{source_id}/normalized.md")
+    expected_normalized = f"sources/{source_id}/normalized.md"
+    if manifest.get("source_id") != source_id or manifest.get("normalized_path") != expected_normalized:
+        return {
+            "api_version": API_VERSION,
+            "success": False,
+            "source_id": source_id,
+            "manifest": manifest,
+            "message": "source manifest identity or normalized_path is invalid",
+        }
+    note_path = confined_file(source_root, vault_root / expected_normalized)
+    if note_path is None:
+        return {
+            "api_version": API_VERSION,
+            "success": False,
+            "source_id": source_id,
+            "manifest": manifest,
+            "message": "normalized note is missing or outside its source directory",
+        }
     body = ""
     try:
         _, note_body = parse_frontmatter(note_path.read_text(encoding="utf-8"))
@@ -189,6 +229,13 @@ def get_observations(
 ) -> dict[str, Any]:
     vault_root = vault_root.resolve()
     if observation_id:
+        if not OBSERVATION_ID_PATTERN.fullmatch(observation_id):
+            return {
+                "api_version": API_VERSION,
+                "success": False,
+                "observation_id": observation_id,
+                "message": "invalid observation_id",
+            }
         record = get_observation(vault_root, observation_id)
         if record is None:
             return {
@@ -367,10 +414,13 @@ def _get_wiki_or_observations(vault_root: Path, *, kind: str, ref: str) -> dict[
 
 
 def _find_wiki_path(vault_root: Path, wiki_id_or_path: str) -> Path | None:
-    candidate = vault_root / wiki_id_or_path
-    if candidate.is_file():
-        return candidate
-    for path in sorted((vault_root / "wiki").glob("**/*.md")):
+    wiki_root = vault_root / "wiki"
+    requested = Path(wiki_id_or_path)
+    if not requested.is_absolute() and ".." not in requested.parts:
+        candidate = confined_file(wiki_root, vault_root / requested)
+        if candidate is not None:
+            return candidate
+    for path in _wiki_markdown_paths(wiki_root):
         if path.name == "README.md":
             continue
         try:
@@ -383,17 +433,16 @@ def _find_wiki_path(vault_root: Path, wiki_id_or_path: str) -> Path | None:
 
 
 def _find_wiki_by_ref(vault_root: Path, *, kind: str, ref: str) -> Path | None:
-    slug = ref
-    for prefix in (f"{kind}-", "entity-", "topic-"):
-        if slug.startswith(prefix):
-            slug = slug[len(prefix) :]
-            break
+    wiki_root = vault_root / "wiki"
     directory = "entities" if kind == "entity" else "topics"
-    direct = vault_root / "wiki" / directory / f"{slug}.md"
-    if direct.is_file():
-        return direct
+    pattern = REFERENCE_PATTERNS[kind]
+    if pattern.fullmatch(ref):
+        slug = ref.removeprefix(f"{kind}-")
+        direct = confined_file(wiki_root, wiki_root / directory / f"{slug}.md")
+        if direct is not None:
+            return direct
     # Broader scan by title/ref substring.
-    for path in sorted((vault_root / "wiki").glob("**/*.md")):
+    for path in _wiki_markdown_paths(wiki_root):
         if path.name == "README.md":
             continue
         try:
@@ -407,3 +456,14 @@ def _find_wiki_by_ref(vault_root: Path, *, kind: str, ref: str) -> Path | None:
         if ref.casefold() in title.casefold() or ref.casefold() in wiki_id.casefold() or ref.casefold() in path.stem.casefold():
             return path
     return None
+
+
+def _wiki_markdown_paths(wiki_root: Path) -> list[Path]:
+    if not wiki_root.is_dir():
+        return []
+    paths: list[Path] = []
+    for candidate in sorted(wiki_root.glob("**/*.md")):
+        path = confined_file(wiki_root, candidate)
+        if path is not None:
+            paths.append(path)
+    return paths

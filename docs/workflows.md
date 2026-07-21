@@ -235,6 +235,8 @@ docker compose up --build
 
 The MCP server is **read-only**: it exposes search, sources, evidence locators, entities/topics, observations, perspective at/timeline/compare, synthesis pages, explore gaps/ask, and cross-MCP composition helpers (`compose_contract`, `compose_with_external`). It never writes observations, wiki, memory, or update-queue proposals. Set `KNOWLEDGE_DESK_ROOT` and optional `KNOWLEDGE_DESK_INDEX_PATH` for container deployments. Prefer observation `statement_basis` over wiki prose; missing evidence is `unknown`/`insufficient_evidence`, never neutral fill-in.
 
+Compose publishes MCP on host loopback only (`127.0.0.1:8000`) by default. Do not expose the unauthenticated MCP transport directly to a LAN or the public internet. Remote deployments must opt in explicitly and place an authenticated, TLS-terminating reverse proxy or equivalent access-control boundary in front of the service.
+
 ## Memory workspaces (user-owned thesis / frameworks)
 
 Multi-page **user-owned** workbenches live under `memory/workspaces/` (thesis, framework, prediction sets, research programs, …). They are **not** written by `wiki evolve`, ingest, subscribe poll, or the maintainer. Refine only via explicit CLI (or `workspace_refine_proposal`).
