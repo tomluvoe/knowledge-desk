@@ -8,10 +8,10 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from evidence_vault.cli import main
-from evidence_vault.errors import EvidenceVaultError
-from evidence_vault.validation import validate_vault
-from evidence_vault.youtube_transcript import (
+from knowledge_desk.cli import main
+from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.validation import validate_vault
+from knowledge_desk.youtube_transcript import (
     TranscriptPayload,
     TranscriptSnippet,
     extract_youtube_video_id,
@@ -80,7 +80,7 @@ class YouTubeTranscriptTests(unittest.TestCase):
             video_id,
             extract_youtube_video_id(f"https://www.youtube.com/shorts/{video_id}"),
         )
-        with self.assertRaises(EvidenceVaultError):
+        with self.assertRaises(KnowledgeDeskError):
             extract_youtube_video_id("https://example.com/not-youtube")
 
     def test_render_and_format_timestamp(self) -> None:
@@ -137,7 +137,7 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertEqual("en", manifest["language"])
 
     def test_missing_transcript_fails_without_publish(self) -> None:
-        fetcher = FakeFetcher(error=EvidenceVaultError("no captions"))
+        fetcher = FakeFetcher(error=KnowledgeDeskError("no captions"))
         result = fetch_youtube_transcript(self.vault, "dQw4w9WgXcQ", fetcher=fetcher)
         self.assertEqual("failed", result.status)
         self.assertIn("no captions", result.message)

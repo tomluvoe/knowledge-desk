@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://evidence-vault.local/schemas/ingest-log-entry/1.0.0",
+  "$id": "https://knowledge-desk.local/schemas/ingest-log-entry/1.0.0",
   "title": "Successful ingest operation log entry",
   "type": "object",
   "additionalProperties": false,

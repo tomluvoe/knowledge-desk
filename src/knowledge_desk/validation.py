@@ -9,7 +9,7 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
 
-from evidence_vault.util import (
+from knowledge_desk.util import (
     SCHEMA_VERSION,
     normalized_content,
     parse_frontmatter,

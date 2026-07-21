@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.ingest import IngestMetadata, ingest_file
-from evidence_vault.util import render_frontmatter, sha256_text
-from evidence_vault.validation import validate_locator, validate_vault
+from knowledge_desk.ingest import IngestMetadata, ingest_file
+from knowledge_desk.util import render_frontmatter, sha256_text
+from knowledge_desk.validation import validate_locator, validate_vault
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

@@ -1,6 +1,6 @@
 # Operator guide
 
-This guide is for humans and coding agents operating an Evidence Vault without prior chat history. Start at [AGENTS.md](../AGENTS.md) for invariants; use this document for day-to-day workflows.
+This guide is for humans and coding agents operating an Knowledge Desk without prior chat history. Start at [AGENTS.md](../AGENTS.md) for invariants; use this document for day-to-day workflows.
 
 Obsidian is an **optional** viewer over ordinary Markdown and folders. The vault is useful with only a filesystem, Git, `uv`, and the CLI (and optionally MCP/Docker).
 
@@ -36,10 +36,10 @@ uv python install 3.12
 uv sync --locked
 
 # Ingest a local file
-uv run evidence-vault ingest path/to/note.md --title "My note" --language en
+uv run knowledge-desk ingest path/to/note.md --title "My note" --language en
 
 # Inspect
-uv run evidence-vault validate
+uv run knowledge-desk validate
 ls sources/
 ```
 
@@ -52,15 +52,15 @@ JSON operation results are printed to stdout for scripting.
 3. Ignore or hide `system/.index/`, `.venv/`, and `__pycache__` via Obsidian exclusion settings if desired.
 4. Do **not** edit files under `sources/*/original/`. Prefer new observations and wiki/memory revisions over mutating evidence.
 
-You do not need Obsidian plugins for Evidence Vault to function.
+You do not need Obsidian plugins for Knowledge Desk to function.
 
 ## Ingesting PDF, Markdown, and text
 
 ```bash
-uv run evidence-vault ingest document.pdf --title "Paper" --creator "Author" --published 2024-01-15
-uv run evidence-vault ingest note.md
-uv run evidence-vault ingest notes.txt
-uv run evidence-vault ingest inbox/          # directory: top-level files only
+uv run knowledge-desk ingest document.pdf --title "Paper" --creator "Author" --published 2024-01-15
+uv run knowledge-desk ingest note.md
+uv run knowledge-desk ingest notes.txt
+uv run knowledge-desk ingest inbox/          # directory: top-level files only
 ```
 
 - Supported: `.pdf`, `.md`/`.markdown`, `.txt` (strict UTF-8).
@@ -70,11 +70,11 @@ uv run evidence-vault ingest inbox/          # directory: top-level files only
 ### YouTube transcripts
 
 ```bash
-uv run evidence-vault fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
 # review inbox/youtube-VIDEO_ID.md then:
-uv run evidence-vault ingest inbox/youtube-VIDEO_ID.md
+uv run knowledge-desk ingest inbox/youtube-VIDEO_ID.md
 # or one-shot:
-uv run evidence-vault fetch-transcript "VIDEO_ID" --ingest --title "Talk"
+uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest --title "Talk"
 ```
 
 `fetch-transcript` uses the network; ordinary `ingest`/`validate` stay offline-capable.
@@ -91,26 +91,26 @@ Query path: exact evidence → observations → wiki/memory. Cite the most direc
 ## CLI query surface
 
 ```bash
-uv run evidence-vault observations list --subject entity-example
-uv run evidence-vault observations get obs-20260718-frog-calls
-uv run evidence-vault perspective at --subject entity-x --topic topic-y --as-of 2024-06-01
-uv run evidence-vault perspective timeline --subject entity-x --topic topic-y
-uv run evidence-vault perspective compare --subject a --subject b --topic t --as-of 2024-06-01
-uv run evidence-vault index rebuild
-uv run evidence-vault search "keyword" --layer observation
-uv run evidence-vault explore gaps
-uv run evidence-vault explore ask "What does the source say about frogs?"
-uv run evidence-vault wiki evolve
-uv run evidence-vault wiki refine-validate
-uv run evidence-vault validate
+uv run knowledge-desk observations list --subject entity-example
+uv run knowledge-desk observations get obs-20260718-frog-calls
+uv run knowledge-desk perspective at --subject entity-x --topic topic-y --as-of 2024-06-01
+uv run knowledge-desk perspective timeline --subject entity-x --topic topic-y
+uv run knowledge-desk perspective compare --subject a --subject b --topic t --as-of 2024-06-01
+uv run knowledge-desk index rebuild
+uv run knowledge-desk search "keyword" --layer observation
+uv run knowledge-desk explore gaps
+uv run knowledge-desk explore ask "What does the source say about frogs?"
+uv run knowledge-desk wiki evolve
+uv run knowledge-desk wiki refine-validate
+uv run knowledge-desk validate
 ```
 
 ## MCP (read-only)
 
 ```bash
-uv run evidence-vault mcp serve --transport stdio
+uv run knowledge-desk mcp serve --transport stdio
 # or network:
-uv run evidence-vault mcp serve --transport sse --host 127.0.0.1 --port 8000
+uv run knowledge-desk mcp serve --transport sse --host 127.0.0.1 --port 8000
 # or Docker:
 docker compose up --build
 ```
@@ -122,9 +122,9 @@ Example client config (stdio):
 ```json
 {
   "mcpServers": {
-    "evidence-vault": {
+    "knowledge-desk": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/evidence-vault", "evidence-vault", "--vault", "/path/to/evidence-vault", "mcp", "serve", "--transport", "stdio"]
+      "args": ["run", "--directory", "/path/to/knowledge-desk", "knowledge-desk", "--vault", "/path/to/knowledge-desk", "mcp", "serve", "--transport", "stdio"]
     }
   }
 }
@@ -135,9 +135,9 @@ Example client config (stdio):
 Place agent proposals in `system/update-queue/` (or use `explore … --propose`). Queue files are **not** truth until applied.
 
 ```bash
-uv run evidence-vault proposal list
-uv run evidence-vault proposal apply path/to/proposal.json
-uv run evidence-vault proposal reject path/to/proposal.json --reason "…"
+uv run knowledge-desk proposal list
+uv run knowledge-desk proposal apply path/to/proposal.json
+uv run knowledge-desk proposal reject path/to/proposal.json --reason "…"
 ```
 
 Canonical writes (ingest, observe, wiki evolve, proposal apply/reject) take an exclusive lock at `system/.locks/writer.lock`. MCP and query commands remain read-only and do not take the lock.
@@ -157,13 +157,13 @@ High-impact wiki/memory/schema changes should land as Git commits (or PRs) you c
 ```bash
 # Disposable FTS index (safe to delete)
 rm -rf system/.index
-uv run evidence-vault index rebuild
+uv run knowledge-desk index rebuild
 
 # Staging leftovers after crashed ingest
 rm -rf system/.staging
 
 # Full health
-uv run evidence-vault validate
+uv run knowledge-desk validate
 uv run --offline --no-sync python -m unittest discover -s tests -v
 ```
 
@@ -172,7 +172,7 @@ Canonical knowledge lives in `sources/`, `observations/`, `wiki/`, `memory/`, an
 ## Adding a domain pack or adapter
 
 - **Domain pack**: optional under `domains/<pack>/manifest.json` with reverse-DNS `namespace` and extension schemas. Core schemas reject unnamespaced fields; put domain data under `extensions`.
-- **Ingest adapter**: implement the adapter protocol under `src/evidence_vault/adapters/`, register extensions, add fixtures and tests. Prefer deterministic extraction; never execute source code.
+- **Ingest adapter**: implement the adapter protocol under `src/knowledge_desk/adapters/`, register extensions, add fixtures and tests. Prefer deterministic extraction; never execute source code.
 
 See [architecture](architecture.md) and [artifact model](artifact-model.md).
 
@@ -196,7 +196,7 @@ See [architecture](architecture.md) and [artifact model](artifact-model.md).
 - **Backup**: copy/git-bundle the repository (and any LFS/media store). Restoring Git history restores evidence identity.
 - **Sync**: any Git remote works; avoid tools that rewrite original bytes under `sources/*/original/`.
 - **Migration**: schemas are versioned (`schema_version`). Plan additive migrations; never silently rewrite historical observations—append superseding ones instead.
-- After restore: `uv sync --locked`, `evidence-vault validate`, `evidence-vault index rebuild`.
+- After restore: `uv sync --locked`, `knowledge-desk validate`, `knowledge-desk index rebuild`.
 
 ## Where to read next
 

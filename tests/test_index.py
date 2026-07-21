@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evidence_vault.index import index_path, rebuild_index, search_index
-from evidence_vault.ingest import IngestMetadata, ingest_file
-from evidence_vault.observe import append_observation
-from evidence_vault.util import render_frontmatter, utc_now
+from knowledge_desk.index import index_path, rebuild_index, search_index
+from knowledge_desk.ingest import IngestMetadata, ingest_file
+from knowledge_desk.observe import append_observation
+from knowledge_desk.util import render_frontmatter, utc_now
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

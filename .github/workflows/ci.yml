@@ -43,4 +43,4 @@ jobs:
         run: uv run --offline --no-sync python -m unittest discover -s tests -v
 
       - name: Validate vault offline
-        run: uv run --offline --no-sync evidence-vault validate
+        run: uv run --offline --no-sync knowledge-desk validate

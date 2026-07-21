@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from evidence_vault.adapters.base import ExtractionResult
-from evidence_vault.adapters.text import decode_utf8
-from evidence_vault.util import CONTENT_END, CONTENT_START
+from knowledge_desk.adapters.base import ExtractionResult
+from knowledge_desk.adapters.text import decode_utf8
+from knowledge_desk.util import CONTENT_END, CONTENT_START
 
 
 class MarkdownAdapter:

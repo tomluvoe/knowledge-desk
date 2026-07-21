@@ -6,10 +6,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.errors import EvidenceVaultError, ValidationError
-from evidence_vault.observe import _append_observation_unlocked
-from evidence_vault.util import render_frontmatter, safe_filename, utc_now, write_text_synced
-from evidence_vault.writer import vault_write_lock
+from knowledge_desk.errors import KnowledgeDeskError, ValidationError
+from knowledge_desk.observe import _append_observation_unlocked
+from knowledge_desk.util import render_frontmatter, safe_filename, utc_now, write_text_synced
+from knowledge_desk.writer import vault_write_lock
 
 
 QUEUE_DIR = "system/update-queue"
@@ -81,7 +81,7 @@ def apply_proposal(vault_root: Path, proposal_path: Path) -> ProposalResult:
                     raise ValidationError(obs_result.message)
                 applied = {"observation": obs_result.to_dict()}
             else:
-                raise EvidenceVaultError(f"unsupported or incomplete proposal kind: {kind!r}")
+                raise KnowledgeDeskError(f"unsupported or incomplete proposal kind: {kind!r}")
 
             payload["status"] = "applied"
             payload["applied_at"] = utc_now()
@@ -91,7 +91,7 @@ def apply_proposal(vault_root: Path, proposal_path: Path) -> ProposalResult:
             result.details = {"archived_to": dest, **applied}
             result.message = f"proposal applied and archived to {dest}"
             return result
-    except (EvidenceVaultError, OSError, json.JSONDecodeError, ValueError) as exc:
+    except (KnowledgeDeskError, OSError, json.JSONDecodeError, ValueError) as exc:
         result.message = str(exc)
         return result
 
@@ -113,20 +113,20 @@ def reject_proposal(vault_root: Path, proposal_path: Path, *, reason: str | None
             result.details = {"archived_to": dest}
             result.message = f"proposal rejected and archived to {dest}"
             return result
-    except (EvidenceVaultError, OSError, json.JSONDecodeError, ValueError) as exc:
+    except (KnowledgeDeskError, OSError, json.JSONDecodeError, ValueError) as exc:
         result.message = str(exc)
         return result
 
 
 def _load_proposal(path: Path) -> dict[str, Any]:
     if not path.is_file():
-        raise EvidenceVaultError(f"proposal not found: {path}")
+        raise KnowledgeDeskError(f"proposal not found: {path}")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise EvidenceVaultError(f"unreadable proposal: {exc}") from exc
+        raise KnowledgeDeskError(f"unreadable proposal: {exc}") from exc
     if not isinstance(payload, dict):
-        raise EvidenceVaultError("proposal root must be an object")
+        raise KnowledgeDeskError("proposal root must be an object")
     return payload
 
 

@@ -1,14 +1,14 @@
-class EvidenceVaultError(Exception):
+class KnowledgeDeskError(Exception):
     """Base error for deterministic, user-facing failures."""
 
 
-class UnsupportedFormatError(EvidenceVaultError):
+class UnsupportedFormatError(KnowledgeDeskError):
     """Raised when no ingestion adapter supports an input."""
 
 
-class ExtractionError(EvidenceVaultError):
+class ExtractionError(KnowledgeDeskError):
     """Raised when content cannot be safely normalized."""
 
 
-class ValidationError(EvidenceVaultError):
+class ValidationError(KnowledgeDeskError):
     """Raised when staged canonical artifacts are invalid."""

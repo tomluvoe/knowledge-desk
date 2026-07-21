@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://evidence-vault.local/schemas/evidence-locator/1.0.0",
+  "$id": "https://knowledge-desk.local/schemas/evidence-locator/1.0.0",
   "title": "Exact evidence locator",
   "type": "object",
   "additionalProperties": false,

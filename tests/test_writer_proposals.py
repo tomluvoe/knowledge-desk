@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evidence_vault.explore import explore_ask, explore_gaps
-from evidence_vault.ingest import IngestMetadata, ingest_file, ingest_path
-from evidence_vault.proposals import apply_proposal, list_proposals, reject_proposal
-from evidence_vault.writer import vault_write_lock
+from knowledge_desk.explore import explore_ask, explore_gaps
+from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path
+from knowledge_desk.proposals import apply_proposal, list_proposals, reject_proposal
+from knowledge_desk.writer import vault_write_lock
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

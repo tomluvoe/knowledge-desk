@@ -8,9 +8,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.errors import EvidenceVaultError, ValidationError
-from evidence_vault.util import write_json_synced
-from evidence_vault.validation import load_schema, schema_errors, validate_locator
+from knowledge_desk.errors import KnowledgeDeskError, ValidationError
+from knowledge_desk.util import write_json_synced
+from knowledge_desk.validation import load_schema, schema_errors, validate_locator
 
 
 @dataclass
@@ -34,9 +34,9 @@ def load_observation_document(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise EvidenceVaultError(f"cannot read observation document {path}: {exc}") from exc
+        raise KnowledgeDeskError(f"cannot read observation document {path}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise EvidenceVaultError(f"observation document root must be an object: {path}")
+        raise KnowledgeDeskError(f"observation document root must be an object: {path}")
     return payload
 
 
@@ -72,7 +72,7 @@ def validate_observation_document(vault_root: Path, observation: dict[str, Any])
 
 def append_observation(vault_root: Path, observation: dict[str, Any]) -> ObserveResult:
     """Append an observation if it is new; never rewrite an existing record."""
-    from evidence_vault.writer import vault_write_lock
+    from knowledge_desk.writer import vault_write_lock
 
     with vault_write_lock(vault_root):
         return _append_observation_unlocked(vault_root, observation)
@@ -122,7 +122,7 @@ def _append_observation_unlocked(vault_root: Path, observation: dict[str, Any]) 
         result.status = "created"
         result.message = "observation appended and validated"
         return result
-    except (EvidenceVaultError, OSError, ValueError, json.JSONDecodeError) as exc:
+    except (KnowledgeDeskError, OSError, ValueError, json.JSONDecodeError) as exc:
         result.message = str(exc)
         return result
     finally:
@@ -133,7 +133,7 @@ def _append_observation_unlocked(vault_root: Path, observation: dict[str, Any]) 
 def append_observation_path(vault_root: Path, document_path: Path) -> ObserveResult:
     try:
         observation = load_observation_document(document_path.resolve())
-    except EvidenceVaultError as exc:
+    except KnowledgeDeskError as exc:
         return ObserveResult(message=str(exc))
     return append_observation(vault_root, observation)
 

@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.errors import EvidenceVaultError
-from evidence_vault.explore import explore_ask, explore_gaps
-from evidence_vault.index import rebuild_index, search_index
-from evidence_vault.observations import ObservationQuery, get_observation, list_observations
-from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
-from evidence_vault.util import normalized_content, parse_frontmatter
-from evidence_vault.validation import validate_locator
+from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.explore import explore_ask, explore_gaps
+from knowledge_desk.index import rebuild_index, search_index
+from knowledge_desk.observations import ObservationQuery, get_observation, list_observations
+from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
+from knowledge_desk.util import normalized_content, parse_frontmatter
+from knowledge_desk.validation import validate_locator
 
 
 MAX_LIMIT = 50
@@ -262,9 +262,9 @@ def compare_perspectives_api(
     as_of: str,
 ) -> dict[str, Any]:
     if len(subjects) < 2:
-        raise EvidenceVaultError("compare_perspectives requires at least two subjects")
+        raise KnowledgeDeskError("compare_perspectives requires at least two subjects")
     if not topics:
-        raise EvidenceVaultError("compare_perspectives requires at least one topic")
+        raise KnowledgeDeskError("compare_perspectives requires at least one topic")
     result = compare_perspectives(vault_root, subjects, topics[0], as_of, topics=topics)
     payload = result.to_dict()
     payload["api_version"] = API_VERSION

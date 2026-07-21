@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evidence_vault.ingest import IngestMetadata, ingest_file
-from evidence_vault.mcp_server import create_mcp_server
-from evidence_vault.observe import append_observation
-from evidence_vault import read_api
-from evidence_vault.wiki import evolve_wiki
+from knowledge_desk.ingest import IngestMetadata, ingest_file
+from knowledge_desk.mcp_server import create_mcp_server
+from knowledge_desk.observe import append_observation
+from knowledge_desk import read_api
+from knowledge_desk.wiki import evolve_wiki
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

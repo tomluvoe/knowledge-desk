@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://evidence-vault.local/schemas/observation/1.0.0",
+  "$id": "https://knowledge-desk.local/schemas/observation/1.0.0",
   "title": "Generic temporal observation",
   "type": "object",
   "additionalProperties": false,

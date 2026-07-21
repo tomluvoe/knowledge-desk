@@ -9,9 +9,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable
 
-from evidence_vault.adapters import adapter_for_suffix
-from evidence_vault.errors import EvidenceVaultError, ValidationError
-from evidence_vault.util import (
+from knowledge_desk.adapters import adapter_for_suffix
+from knowledge_desk.errors import KnowledgeDeskError, ValidationError
+from knowledge_desk.util import (
     SCHEMA_VERSION,
     render_frontmatter,
     safe_filename,
@@ -69,7 +69,7 @@ def ingest_path(vault_root: Path, input_path: Path, metadata: IngestMetadata) ->
 
 
 def ingest_file(vault_root: Path, input_path: Path, metadata: IngestMetadata) -> OperationResult:
-    from evidence_vault.writer import vault_write_lock
+    from knowledge_desk.writer import vault_write_lock
 
     with vault_write_lock(vault_root):
         return _ingest_file_unlocked(vault_root, input_path, metadata)
@@ -80,7 +80,7 @@ def _ingest_file_unlocked(vault_root: Path, input_path: Path, metadata: IngestMe
     staging_parent: Path | None = None
     try:
         if not input_path.is_file():
-            raise EvidenceVaultError(f"input is not a regular file: {input_path}")
+            raise KnowledgeDeskError(f"input is not a regular file: {input_path}")
         adapter = adapter_for_suffix(input_path.suffix)
         digest = sha256_file(input_path)
         content_hash = f"sha256:{digest}"
@@ -174,7 +174,7 @@ def _ingest_file_unlocked(vault_root: Path, input_path: Path, metadata: IngestMe
         write_json_synced(staged_source / "manifest.json", manifest)
         write_text_synced(staged_source / "normalized.md", normalized_note)
 
-        from evidence_vault.validation import validate_source_artifacts
+        from knowledge_desk.validation import validate_source_artifacts
 
         errors = validate_source_artifacts(vault_root, staged_source)
         if errors:
@@ -203,7 +203,7 @@ def _ingest_file_unlocked(vault_root: Path, input_path: Path, metadata: IngestMe
         result.warnings = warnings
         result.message = "canonical source artifacts created and validated"
         return result
-    except (EvidenceVaultError, OSError, ValueError, json.JSONDecodeError) as exc:
+    except (KnowledgeDeskError, OSError, ValueError, json.JSONDecodeError) as exc:
         result.message = str(exc)
         return result
     finally:

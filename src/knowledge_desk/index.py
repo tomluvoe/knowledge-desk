@@ -7,8 +7,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from evidence_vault.observations import load_all_observations
-from evidence_vault.util import normalized_content, parse_frontmatter
+from knowledge_desk.observations import load_all_observations
+from knowledge_desk.util import normalized_content, parse_frontmatter
 
 
 INDEX_RELATIVE_PATH = "system/.index/vault.sqlite"
@@ -60,7 +60,7 @@ class SearchResult:
 
 
 def index_path(vault_root: Path) -> Path:
-    override = os.environ.get("EVIDENCE_VAULT_INDEX_PATH")
+    override = os.environ.get("KNOWLEDGE_DESK_INDEX_PATH")
     if override:
         return Path(override).expanduser().resolve()
     return vault_root.resolve() / INDEX_RELATIVE_PATH
@@ -118,7 +118,7 @@ def search_index(
         return result
     path = index_path(vault_root)
     if not path.is_file():
-        result.message = f"index missing at {INDEX_RELATIVE_PATH}; run `evidence-vault index rebuild`"
+        result.message = f"index missing at {INDEX_RELATIVE_PATH}; run `knowledge-desk index rebuild`"
         return result
 
     limit = max(1, min(limit, 200))
