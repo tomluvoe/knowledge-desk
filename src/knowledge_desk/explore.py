@@ -313,6 +313,389 @@ def explore_ask(
     return result
 
 
+@dataclass
+class CompileFromAskResult:
+    operation: str = "explore.compile-from-ask"
+    status: str = "failed"  # proposed | noop | insufficient_evidence | failed
+    question: str = ""
+    ask_status: str = ""
+    wiki_health: str = ""  # healthy | thin | missing | unknown
+    proposal_path: str | None = None
+    proposal_kind: str | None = None
+    citations: list[dict[str, object]] = field(default_factory=list)
+    filters: dict[str, str | None] = field(default_factory=dict)
+    message: str = ""
+    details: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def compile_from_ask(
+    vault_root: Path,
+    question: str,
+    *,
+    limit: int = 5,
+    subject: str | None = None,
+    topic: str | None = None,
+    source_id: str | None = None,
+    propose: bool = True,
+) -> CompileFromAskResult:
+    """Demand-driven compile: ask → detect thin/missing wiki → proposal (no silent MCP write).
+
+    MCP explore_ask stays read-only. This CLI path turns question traffic into a
+    reviewable compile_from_ask_proposal or open-question proposal.
+    """
+    vault_root = vault_root.resolve()
+    result = CompileFromAskResult(
+        question=question,
+        filters={"subject": subject, "topic": topic, "source_id": source_id},
+    )
+    ask = explore_ask(
+        vault_root,
+        question,
+        limit=limit,
+        propose=False,
+        subject=subject,
+        topic=topic,
+        source_id=source_id,
+    )
+    # Subject/topic filters only bind sources already linked by observations.
+    # Compile-from-ask often runs *before* observations exist — fall back to
+    # unfiltered (or source_id-only) retrieval for evidence discovery while still
+    # using filters for wiki-health and proposed observation refs.
+    used_filter_fallback = False
+    if (ask.status != "answered" or not ask.citations) and (subject or topic):
+        fallback = explore_ask(
+            vault_root,
+            question,
+            limit=limit,
+            propose=False,
+            subject=None,
+            topic=None,
+            source_id=source_id,
+        )
+        if fallback.status == "answered" and fallback.citations:
+            ask = fallback
+            used_filter_fallback = True
+
+    result.ask_status = ask.status
+    result.citations = list(ask.citations)
+    result.details["ask"] = {
+        "status": ask.status,
+        "reason": ask.reason,
+        "message": ask.message,
+        "layers_consulted": ask.layers_consulted,
+        "filter_fallback": used_filter_fallback,
+    }
+
+    if ask.status != "answered" or not ask.citations:
+        result.wiki_health = "unknown"
+        result.status = "insufficient_evidence"
+        result.message = ask.message or "no evidence to compile from"
+        if propose:
+            # Reuse open-question proposal path.
+            citations = [
+                AskCitation(
+                    layer=str(c.get("layer") or ""),
+                    vault_id=str(c.get("vault_id") or ""),
+                    path=str(c.get("path") or ""),
+                    locator_kind=str(c.get("locator_kind") or ""),
+                    selector=c.get("selector") if isinstance(c.get("selector"), dict) else {},
+                    quote=str(c.get("quote") or ""),
+                )
+                for c in ask.citations
+                if isinstance(c, dict)
+            ]
+            result.proposal_path = _write_open_question_proposal(
+                vault_root,
+                question=" ".join(question.split()),
+                citations=citations,
+                status="insufficient_evidence",
+            )
+            result.proposal_kind = "explore_ask_proposal"
+            result.message += f"; open-question proposal at {result.proposal_path}"
+        return result
+
+    health = _assess_wiki_health(vault_root, subject=subject, topic=topic, citations=ask.citations)
+    result.wiki_health = health["status"]
+    result.details["wiki_health"] = health
+
+    if health["status"] == "healthy":
+        result.status = "noop"
+        result.message = (
+            f"evidence found ({len(ask.citations)} citation(s)) and wiki coverage is healthy; "
+            "no compile proposal written"
+        )
+        return result
+
+    # thin or missing → structured compile proposal
+    if not propose:
+        result.status = "noop"
+        result.message = (
+            f"wiki is {health['status']}; pass propose=True / CLI default to queue a compile proposal"
+        )
+        return result
+
+    proposal_path = _write_compile_from_ask_proposal(
+        vault_root,
+        question=" ".join(question.split()),
+        ask=ask,
+        subject=subject,
+        topic=topic,
+        wiki_health=health,
+    )
+    result.proposal_path = proposal_path
+    result.proposal_kind = "compile_from_ask_proposal"
+    result.status = "proposed"
+    result.message = (
+        f"wiki {health['status']}; compile_from_ask proposal at {proposal_path} "
+        "(review, then proposal apply → observations + wiki evolve)"
+    )
+    return result
+
+
+def _assess_wiki_health(
+    vault_root: Path,
+    *,
+    subject: str | None,
+    topic: str | None,
+    citations: list[dict[str, object]],
+) -> dict[str, object]:
+    """Mechanical thin/missing check for subject/topic pages and citation overlap."""
+    pages = list(_iter_entity_topic_wiki(vault_root))
+    subject_cf = subject.casefold() if subject else None
+    topic_cf = topic.casefold() if topic else None
+
+    matched: list[dict[str, Any]] = []
+    for path, meta, _body in pages:
+        kind = meta.get("kind")
+        wiki_id = str(meta.get("wiki_id") or path.stem)
+        title = str(meta.get("title") or "")
+        obs_ids = meta.get("observation_ids") if isinstance(meta.get("observation_ids"), list) else []
+        hay = f"{wiki_id} {title} {path.stem}".casefold()
+        if subject_cf and kind == "entity" and subject_cf in hay:
+            matched.append({"path": path.as_posix(), "wiki_id": wiki_id, "kind": kind, "observation_ids": obs_ids})
+        if topic_cf and kind == "topic" and topic_cf in hay:
+            matched.append({"path": path.as_posix(), "wiki_id": wiki_id, "kind": kind, "observation_ids": obs_ids})
+
+    # If filters name subject/topic but no page matched → missing.
+    if (subject or topic) and not matched:
+        return {"status": "missing", "matched_pages": [], "reason": "no entity/topic wiki page matched filters"}
+
+    # No filters: consider wiki thin if zero entity/topic pages overall that cite any hit source.
+    citation_obs = {
+        str(c.get("vault_id"))
+        for c in citations
+        if isinstance(c, dict) and c.get("layer") == "observation" and c.get("vault_id")
+    }
+    citation_sources = {
+        str(c.get("vault_id"))
+        for c in citations
+        if isinstance(c, dict) and c.get("layer") == "source" and c.get("vault_id")
+    }
+
+    if not subject and not topic:
+        if not pages:
+            return {"status": "missing", "matched_pages": [], "reason": "no entity/topic wiki pages in vault"}
+        # Any page overlapping observation ids or source evidence?
+        overlapping = []
+        wiki_by_source = _wiki_by_source(vault_root)
+        for sid in citation_sources:
+            overlapping.extend(wiki_by_source.get(sid) or [])
+        if overlapping or any(
+            any(oid in citation_obs for oid in (p[1].get("observation_ids") or []) if isinstance(oid, str))
+            for p in pages
+        ):
+            return {
+                "status": "healthy",
+                "matched_pages": [{"wiki_id": p[1].get("wiki_id"), "path": p[0].as_posix()} for p in pages[:5]],
+                "reason": "wiki pages already linked to citation sources/observations",
+            }
+        return {
+            "status": "thin",
+            "matched_pages": [],
+            "reason": "wiki pages exist but none overlap ask citations; compile may still help",
+        }
+
+    # With matched pages: thin if few/no observation_ids overlapping citations.
+    total_obs_links = 0
+    overlap = 0
+    for page in matched:
+        ids = [i for i in page.get("observation_ids") or [] if isinstance(i, str)]
+        total_obs_links += len(ids)
+        overlap += sum(1 for i in ids if i in citation_obs)
+    if total_obs_links == 0:
+        return {
+            "status": "thin",
+            "matched_pages": matched,
+            "reason": "matched wiki page(s) have no observation_ids",
+        }
+    if citation_obs and overlap == 0 and citation_sources:
+        # Page has obs but not from this ask — still treat as thin for this question scope.
+        return {
+            "status": "thin",
+            "matched_pages": matched,
+            "reason": "matched wiki page(s) do not link observations from this ask",
+        }
+    return {
+        "status": "healthy",
+        "matched_pages": matched,
+        "reason": "matched wiki page(s) have observation coverage",
+        "observation_link_count": total_obs_links,
+        "citation_overlap": overlap,
+    }
+
+
+def _iter_entity_topic_wiki(vault_root: Path) -> list[tuple[Path, dict[str, Any], str]]:
+    root = vault_root / "wiki"
+    if not root.is_dir():
+        return []
+    pages: list[tuple[Path, dict[str, Any], str]] = []
+    for path in sorted(root.glob("**/*.md")):
+        if path.name == "README.md":
+            continue
+        try:
+            meta, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        if meta.get("kind") in {"entity", "topic"}:
+            pages.append((path, meta, body))
+    return pages
+
+
+def _write_compile_from_ask_proposal(
+    vault_root: Path,
+    *,
+    question: str,
+    ask: AskResult,
+    subject: str | None,
+    topic: str | None,
+    wiki_health: dict[str, Any],
+) -> str:
+    queue = vault_root / "system" / "update-queue"
+    queue.mkdir(parents=True, exist_ok=True)
+    stamp = utc_now().replace(":", "").replace("-", "")
+    slug = safe_filename(re.sub(r"[^a-z0-9]+", "-", question.casefold())[:40].strip("-") or "compile")
+    name = safe_filename(f"compile-from-ask-{stamp}-{slug}.json")
+    path = queue / name
+    day = utc_now()[:10].replace("-", "")
+
+    # Build observation stubs from source citations when subject/topic filters are real (not todo).
+    proposed_observations: list[dict[str, Any]] = []
+    subject_ref = _ref_from_filter(subject, "entity")
+    topic_ref = _ref_from_filter(topic, "topic")
+    for index, citation in enumerate(ask.citations):
+        if not isinstance(citation, dict) or citation.get("layer") != "source":
+            continue
+        vault_id = citation.get("vault_id")
+        if not isinstance(vault_id, str):
+            continue
+        manifest_path = vault_root / "sources" / vault_id / "manifest.json"
+        source_hash = None
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(manifest, dict):
+                source_hash = manifest.get("content_hash")
+        except (OSError, json.JSONDecodeError):
+            source_hash = None
+        if not isinstance(source_hash, str):
+            continue
+        quote = str(citation.get("quote") or question)[:500]
+        obs_slug = safe_filename(re.sub(r"[^a-z0-9]+", "-", quote.casefold())[:24].strip("-") or f"c{index}")
+        stub = {
+            "schema_version": "1.0.0",
+            "observation_id": f"obs-{day}-compile-{obs_slug}"[:80],
+            "subjects": [
+                subject_ref
+                or {"kind": "entity", "label": "TODO", "ref_id": "entity-todo"}
+            ],
+            "topics": [
+                topic_ref
+                or {"kind": "topic", "label": "TODO", "ref_id": "topic-todo"}
+            ],
+            "assertion": quote,
+            "epistemic_class": "source_statement",
+            "statement_basis": "explicit_statement",
+            "orientation": "unknown",
+            "confidence": 0.5,
+            "reasoning": "Drafted by explore compile-from-ask; review before apply.",
+            "mechanisms": [],
+            "conditions": [],
+            "implications": [],
+            "catalysts": [],
+            "risks": [],
+            "publication_date": None,
+            "expressed_at": None,
+            "valid_at": None,
+            "recorded_at": utc_now(),
+            "horizon": None,
+            "freshness": {"as_of": None, "status": "unknown"},
+            "evidence": [
+                {
+                    "source_id": vault_id,
+                    "source_hash": source_hash,
+                    "normalized_path": str(citation.get("path") or f"sources/{vault_id}/normalized.md"),
+                    "locator_kind": citation.get("locator_kind") or "line_range",
+                    "selector": citation.get("selector")
+                    if isinstance(citation.get("selector"), dict)
+                    else {"start_line": 1, "end_line": 1},
+                }
+            ],
+            "relations": [],
+            "extensions": {},
+        }
+        proposed_observations.append(stub)
+        if len(proposed_observations) >= 3:
+            break
+
+    payload = {
+        "schema_version": "1.0.0",
+        "kind": "compile_from_ask_proposal",
+        "created_at": utc_now(),
+        "status": "proposed",
+        "question": question,
+        "ask_status": ask.status,
+        "wiki_health": wiki_health,
+        "filters": {"subject": subject, "topic": topic},
+        "citations": ask.citations,
+        "proposed_observations": proposed_observations,
+        "wiki_evolve": {
+            "subject": subject,
+            "topic": topic,
+            "observation_ids": [
+                c.get("vault_id")
+                for c in ask.citations
+                if isinstance(c, dict) and c.get("layer") == "observation" and c.get("vault_id")
+            ],
+        },
+        "run_wiki_evolve": True,
+        "note": (
+            "Review-only. Edit TODO subjects/topics before apply. "
+            "proposal apply appends complete observations then runs wiki evolve under the writer lock. "
+            "MCP explore_ask never writes this automatically."
+        ),
+    }
+    write_json_synced(path, payload)
+    return path.relative_to(vault_root).as_posix()
+
+
+def _ref_from_filter(value: str | None, kind: str) -> dict[str, str] | None:
+    if not value or not value.strip():
+        return None
+    text = value.strip()
+    prefix = f"{kind}-"
+    if text.startswith(prefix) and re.fullmatch(rf"{kind}-[a-z0-9]+(?:-[a-z0-9]+)*", text):
+        label = text[len(prefix) :].replace("-", " ")
+        return {"kind": kind, "ref_id": text, "label": label or text}
+    # Non-id filter string → still TODO for apply safety unless it already looks like a ref
+    slug = re.sub(r"[^a-z0-9]+", "-", text.casefold()).strip("-") or "todo"
+    ref_id = f"{kind}-{slug}"
+    if re.fullmatch(rf"{kind}-[a-z0-9]+(?:-[a-z0-9]+)*", ref_id):
+        return {"kind": kind, "ref_id": ref_id, "label": text}
+    return {"kind": kind, "label": "TODO", "ref_id": f"{kind}-todo"}
+
+
 def _resolve_ask_scope(
     vault_root: Path,
     *,

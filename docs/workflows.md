@@ -194,6 +194,20 @@ uv run knowledge-desk explore ask "What is the view on rates?" \
 
 Filters AND with the query. If nothing matches **inside** the filter, the reason is `no_matches_in_filter` (out-of-scope sources are never used silently). Unfiltered ask remains available. Recipe: “What does XYZ say about ABC?” → bind XYZ as `entity-*` subject on observations, then `explore ask` / `perspective at` with `--subject` and `--topic`. `--propose` writes review-only JSON under `system/update-queue/`; it never publishes wiki, memory, or observations by itself.
 
+### Compile from ask (demand-driven wiki)
+
+When sources answer a question but the living wiki is **missing or thin** for the subject/topic, queue a reviewable compile proposal (MCP `explore_ask` stays read-only):
+
+```bash
+uv run knowledge-desk explore compile-from-ask "What does the note say about frogs?" \
+  --subject entity-example-wetland \
+  --topic topic-amphibian-activity
+# review system/update-queue/compile-from-ask-….json
+uv run knowledge-desk proposal apply system/update-queue/compile-from-ask-….json
+```
+
+Outcomes: `proposed` (wiki missing/thin + evidence), `noop` (wiki already healthy), `insufficient_evidence` (open-question proposal). Apply appends complete observation stubs then runs `wiki evolve` under the writer lock. Stubs with `entity-todo` / `topic-todo` are skipped on apply.
+
 ## Wiki evolve and refine-validate
 
 ```bash
