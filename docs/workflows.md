@@ -221,6 +221,24 @@ docker compose up --build
 
 The MCP server is **read-only**: it exposes search, sources, evidence locators, entities/topics, observations, perspective at/timeline/compare, synthesis pages, explore gaps/ask, and cross-MCP composition helpers (`compose_contract`, `compose_with_external`). It never writes observations, wiki, memory, or update-queue proposals. Set `KNOWLEDGE_DESK_ROOT` and optional `KNOWLEDGE_DESK_INDEX_PATH` for container deployments. Prefer observation `statement_basis` over wiki prose; missing evidence is `unknown`/`insufficient_evidence`, never neutral fill-in.
 
+## Memory workspaces (user-owned thesis / frameworks)
+
+Multi-page **user-owned** workbenches live under `memory/workspaces/` (thesis, framework, prediction sets, research programs, …). They are **not** written by `wiki evolve`, ingest, subscribe poll, or the maintainer. Refine only via explicit CLI (or `workspace_refine_proposal`).
+
+```bash
+uv run knowledge-desk workspace init --title "Macro liquidity thesis" --kind thesis \
+  --id ws-thesis-macro --subject entity-… --topic topic-… \
+  --statement "Working stance…"
+
+uv run knowledge-desk workspace add-page --id ws-thesis-macro --title "Credit stress" --page-kind pillar
+uv run knowledge-desk workspace refine --id ws-thesis-macro --summary "Clarify stance after new tape" --body "…"
+uv run knowledge-desk workspace benchtest --id ws-thesis-macro --since 2026-07-01
+uv run knowledge-desk workspace list
+uv run knowledge-desk workspace get --id ws-thesis-macro
+```
+
+Benchtest classifies claims as supported / challenged / untested / conflicted / pending and may write `benchtests/*.json` + a changelog line; it **does not** auto-edit pages. Link `observation_ids` on pages; label pure priors with `--prior`. MCP exposes read-only `list_workspaces` / `get_workspace`.
+
 ## Cross-MCP composition
 
 Join external MCP context with vault evidence **at query time** without storing private external state:

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-desk.local/schemas/memory-workspace/1.0.0",
+  "title": "Memory workspace spine or page metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workspace_id",
+    "kind",
+    "title",
+    "status",
+    "created_at",
+    "updated_at",
+    "observation_ids",
+    "subject_refs",
+    "topic_refs",
+    "extensions"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "workspace_id": {"type": "string", "pattern": "^ws-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "page_id": {"type": ["string", "null"], "pattern": "^wsp-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "page_kind": {
+      "type": ["string", "null"],
+      "enum": ["spine", "pillar", "prediction", "framework", "note", "invalidation", "other", null]
+    },
+    "kind": {
+      "enum": ["thesis", "framework", "prediction_set", "research_program", "process", "other"]
+    },
+    "title": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "draft", "superseded", "archived"]},
+    "as_of": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "observation_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "uniqueItems": true
+    },
+    "subject_refs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "topic_refs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "prior": {"type": "boolean"},
+    "horizon": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end", "description"],
+          "properties": {
+            "start": {"type": ["string", "null"]},
+            "end": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]}
+          }
+        }
+      ]
+    },
+    "supersedes_page": {"type": ["string", "null"]},
+    "extensions": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"}
+    }
+  }
+}

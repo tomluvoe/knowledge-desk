@@ -181,6 +181,27 @@ def create_mcp_server(
         )
 
     @server.tool(
+        name="list_workspaces",
+        description=(
+            "List user-owned memory workspaces (thesis/framework/…). "
+            "Read-only; workspaces are not auto-written by wiki evolve."
+        ),
+    )
+    def list_workspaces() -> str:
+        from knowledge_desk.workspace import list_workspaces as _list
+
+        return _json(_list(root))
+
+    @server.tool(
+        name="get_workspace",
+        description="Get a memory workspace spine, pages, and changelog tail by workspace_id (ws-…)",
+    )
+    def get_workspace(workspace_id: str) -> str:
+        from knowledge_desk.workspace import get_workspace as _get
+
+        return _json(_get(root, workspace_id))
+
+    @server.tool(
         name="compose_contract",
         description=(
             "Cross-MCP composition contract: how to join external MCP context with this vault "

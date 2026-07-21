@@ -38,6 +38,8 @@ uv run knowledge-desk maintain once
 uv run knowledge-desk maintain status
 uv run knowledge-desk explore gaps
 uv run knowledge-desk explore ask "What does the source say about …?"
+uv run knowledge-desk workspace init --title "My thesis" --kind thesis --id ws-thesis-example
+uv run knowledge-desk workspace benchtest --id ws-thesis-example
 uv run knowledge-desk compose contract
 uv run knowledge-desk mcp serve --transport stdio
 uv run knowledge-desk validate

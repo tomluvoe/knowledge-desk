@@ -125,6 +125,8 @@ class ReadOnlyMcpApiTests(unittest.TestCase):
             "explore_ask",
             "compose_contract",
             "compose_with_external",
+            "list_workspaces",
+            "get_workspace",
         }
         self.assertTrue(expected.issubset(tool_names), tool_names)
         # Starting server factory must not append observations or queue proposals.
