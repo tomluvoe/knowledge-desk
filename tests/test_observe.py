@@ -198,6 +198,19 @@ class ObservationWriteTests(unittest.TestCase):
         self.assertEqual("created", payload["results"][0]["status"])
         self.assertTrue((self.vault / "observations" / "obs-20260718-cli-frog.json").is_file())
 
+        mismatched = dict(document)
+        mismatched["observation_id"] = "obs-20260718-bad-reference"
+        mismatched["subjects"] = [
+            {"kind": "topic", "label": "Wetland", "ref_id": "entity-wetland"}
+        ]
+        rejected = append_observation(self.vault, mismatched)
+        self.assertEqual("failed", rejected.status)
+        self.assertIn("kind must be 'entity'", rejected.message)
+        self.assertIn("requires ref_id prefix topic-", rejected.message)
+        self.assertFalse(
+            (self.vault / "observations" / "obs-20260718-bad-reference.json").exists()
+        )
+
     def test_observe_rejects_unresolvable_evidence(self) -> None:
         document = {
             "schema_version": "1.0.0",

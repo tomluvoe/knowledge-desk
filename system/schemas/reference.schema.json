@@ -13,5 +13,21 @@
     "path": {"type": "string", "pattern": "^wiki/(entities|topics)/[^/]+\\.md$"},
     "aliases": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
     "extensions": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"}}
-  }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {"const": "entity"},
+        "ref_id": {"type": "string", "pattern": "^entity-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "path": {"type": "string", "pattern": "^wiki/entities/[^/]+\\.md$"}
+      }
+    },
+    {
+      "properties": {
+        "kind": {"const": "topic"},
+        "ref_id": {"type": "string", "pattern": "^topic-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "path": {"type": "string", "pattern": "^wiki/topics/[^/]+\\.md$"}
+      }
+    }
+  ]
 }

@@ -314,7 +314,22 @@ def validate_vault(vault_root: Path) -> ValidationReport:
             errors.append(f"duplicate observation ID: {observation_id}")
         if isinstance(observation_id, str):
             observation_ids.add(observation_id)
+            expected_path = vault_root / "observations" / f"{observation_id}.json"
+            if path != expected_path:
+                errors.append(
+                    f"{path.relative_to(vault_root)}: observation_id {observation_id!r} must be stored at "
+                    f"{expected_path.relative_to(vault_root).as_posix()}"
+                )
         observations.append((path, observation))
+        for field, expected_kind in (("subjects", "entity"), ("topics", "topic")):
+            references = observation.get(field)
+            if not isinstance(references, list):
+                continue
+            for index, reference in enumerate(references):
+                errors.extend(
+                    f"{path.relative_to(vault_root)}: {field}/{index}: {message}"
+                    for message in reference_identity_errors(reference, expected_kind)
+                )
         for locator in observation.get("evidence", []):
             if isinstance(locator, dict):
                 errors.extend(f"{path.relative_to(vault_root)}: {message}" for message in validate_locator(vault_root, locator))
@@ -354,6 +369,10 @@ def validate_vault(vault_root: Path) -> ValidationReport:
             errors.append(f"{path.relative_to(vault_root)}: duplicate wiki ID {wiki_id}")
         if isinstance(wiki_id, str):
             wiki_ids.add(wiki_id)
+        errors.extend(
+            f"{path.relative_to(vault_root)}: {message}"
+            for message in _wiki_path_identity_errors(vault_root, path, record)
+        )
         for observation_id in record.get("observation_ids", []):
             if observation_id not in observation_ids:
                 errors.append(f"{path.relative_to(vault_root)}: observation target does not exist: {observation_id}")
@@ -363,7 +382,8 @@ def validate_vault(vault_root: Path) -> ValidationReport:
 
     memory_ids: set[str] = set()
     memory_records: list[tuple[Path, dict[str, Any]]] = []
-    workspace_ids: set[str] = set()
+    workspace_spine_ids: set[str] = set()
+    workspace_records: list[tuple[str, dict[str, Any]]] = []
     workspace_page_ids: set[str] = set()
     checked.setdefault("memory_workspaces", 0)
     for path in sorted((vault_root / "memory").glob("**/*.md")):
@@ -379,8 +399,16 @@ def validate_vault(vault_root: Path) -> ValidationReport:
             if not record:
                 continue
             ws_id = record.get("workspace_id")
+            errors.extend(
+                f"{rel}: {message}"
+                for message in _workspace_path_identity_errors(vault_root, path, record)
+            )
             if isinstance(ws_id, str):
-                workspace_ids.add(ws_id)
+                workspace_records.append((rel, record))
+                if record.get("page_kind") == "spine" and record.get("page_id") is None:
+                    if ws_id in workspace_spine_ids:
+                        errors.append(f"{rel}: duplicate workspace spine for {ws_id}")
+                    workspace_spine_ids.add(ws_id)
             page_id = record.get("page_id")
             if isinstance(page_id, str):
                 if page_id in workspace_page_ids:
@@ -407,6 +435,10 @@ def validate_vault(vault_root: Path) -> ValidationReport:
         for locator in record.get("evidence", []):
             if isinstance(locator, dict):
                 errors.extend(f"{path.relative_to(vault_root)}: {message}" for message in validate_locator(vault_root, locator))
+    for rel, record in workspace_records:
+        ws_id = record.get("workspace_id")
+        if record.get("page_kind") != "spine" and ws_id not in workspace_spine_ids:
+            errors.append(f"{rel}: workspace page has no canonical spine for {ws_id}")
     memory_edges: list[tuple[str, str]] = []
     for path, record in memory_records:
         supersedes = record.get("supersedes")
@@ -487,6 +519,106 @@ def validate_vault(vault_root: Path) -> ValidationReport:
                 errors.append(f"system/logs/ingest.jsonl:{line_number}: source target does not exist")
 
     return ValidationReport(valid=not errors, errors=errors, checked=checked)
+
+
+def reference_identity_errors(reference: object, expected_kind: str | None = None) -> list[str]:
+    """Return actionable kind/ref_id errors for an entity or topic reference."""
+    if not isinstance(reference, dict):
+        return ["reference must be an object"]
+    errors: list[str] = []
+    kind = reference.get("kind")
+    ref_id = reference.get("ref_id")
+    if expected_kind in {"entity", "topic"} and kind != expected_kind:
+        errors.append(f"kind must be {expected_kind!r} in this field")
+    if kind in {"entity", "topic"} and isinstance(ref_id, str) and not ref_id.startswith(f"{kind}-"):
+        errors.append(f"kind {kind!r} requires ref_id prefix {kind}-")
+    return errors
+
+
+def _wiki_path_identity_errors(
+    vault_root: Path,
+    path: Path,
+    record: dict[str, Any],
+) -> list[str]:
+    kind = record.get("kind")
+    wiki_id = record.get("wiki_id")
+    if not isinstance(kind, str) or not isinstance(wiki_id, str):
+        return []
+
+    suffix: str | None = None
+    directory: str | None = None
+    filename_prefix = ""
+    if kind == "entity" and wiki_id.startswith("wiki-entity-"):
+        directory, suffix = "entities", wiki_id.removeprefix("wiki-entity-")
+    elif kind == "topic" and wiki_id.startswith("wiki-topic-"):
+        directory, suffix = "topics", wiki_id.removeprefix("wiki-topic-")
+    elif kind == "event" and wiki_id.startswith("wiki-event-"):
+        directory, suffix, filename_prefix = "events", wiki_id.removeprefix("wiki-event-"), "event-"
+    elif kind == "comparison" and wiki_id.startswith("wiki-comparison-"):
+        directory, suffix, filename_prefix = (
+            "comparisons",
+            wiki_id.removeprefix("wiki-comparison-"),
+            "compare-",
+        )
+    elif kind == "synthesis" and wiki_id.startswith("wiki-source-summary-"):
+        directory, suffix, filename_prefix = (
+            "syntheses",
+            wiki_id.removeprefix("wiki-source-summary-"),
+            "source-",
+        )
+    elif kind == "synthesis" and wiki_id.startswith("wiki-synthesis-"):
+        directory, suffix, filename_prefix = (
+            "syntheses",
+            wiki_id.removeprefix("wiki-synthesis-"),
+            "synthesis-",
+        )
+
+    if not directory or not suffix:
+        allowed_prefixes = {
+            "entity": "wiki-entity-",
+            "topic": "wiki-topic-",
+            "event": "wiki-event-",
+            "comparison": "wiki-comparison-",
+            "synthesis": "wiki-synthesis- or wiki-source-summary-",
+        }
+        required = allowed_prefixes.get(kind)
+        return [f"kind {kind!r} requires wiki_id prefix {required}"] if required else []
+
+    expected = vault_root / "wiki" / directory / f"{filename_prefix}{suffix}.md"
+    if path != expected:
+        return [
+            f"wiki_id {wiki_id!r} and kind {kind!r} must be stored at "
+            f"{expected.relative_to(vault_root).as_posix()}"
+        ]
+    return []
+
+
+def _workspace_path_identity_errors(
+    vault_root: Path,
+    path: Path,
+    record: dict[str, Any],
+) -> list[str]:
+    workspace_id = record.get("workspace_id")
+    page_id = record.get("page_id")
+    page_kind = record.get("page_kind")
+    if not isinstance(workspace_id, str):
+        return []
+
+    root = vault_root / "memory" / "workspaces" / workspace_id
+    if page_kind == "spine":
+        errors = [] if page_id is None else ["workspace spine must have page_id null"]
+        expected = root / "workspace.md"
+    elif isinstance(page_id, str) and page_kind not in {None, "spine"}:
+        errors = []
+        expected = root / "pages" / f"{page_id.removeprefix('wsp-')}.md"
+    else:
+        return ["workspace pages require a non-spine page_kind and a wsp- page_id"]
+
+    if path != expected:
+        errors.append(
+            f"workspace_id/page identity must be stored at {expected.relative_to(vault_root).as_posix()}"
+        )
+    return errors
 
 
 def _validate_markdown_record(

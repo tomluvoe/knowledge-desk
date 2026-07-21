@@ -179,6 +179,23 @@ class WikiEvolveTests(unittest.TestCase):
         self.assertTrue(any(f["code"] == "unsupported_synthesis" for f in refined.findings))
         self.assertTrue(any(f["code"] == "orphan_page" for f in refined.findings))
 
+    def test_validate_rejects_wiki_path_that_disagrees_with_kind_and_id(self) -> None:
+        evolve_wiki(self.vault)
+        entity = self.vault / "wiki" / "entities" / "example-wetland.md"
+        misplaced = self.vault / "wiki" / "events" / "restored-wetland.md"
+        misplaced.parent.mkdir(parents=True, exist_ok=True)
+        entity.replace(misplaced)
+
+        report = validate_vault(self.vault)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any(
+                "must be stored at wiki/entities/example-wetland.md" in error
+                for error in report.errors
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

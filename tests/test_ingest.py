@@ -417,6 +417,18 @@ class RepositoryContractTests(unittest.TestCase):
         }
         self.assertTrue(schema_errors(mismatched, schema))
 
+    def test_reference_schema_couples_kind_id_and_path(self) -> None:
+        schema = load_schema(REPOSITORY_ROOT, "reference.schema.json")
+        mismatched = {
+            "schema_version": "1.0.0",
+            "ref_id": "entity-example",
+            "kind": "topic",
+            "label": "Example",
+            "path": "wiki/entities/example.md",
+            "extensions": {},
+        }
+        self.assertTrue(schema_errors(mismatched, schema))
+
 
 class ObservationValidationTests(unittest.TestCase):
     def setUp(self) -> None:
