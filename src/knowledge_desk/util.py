@@ -69,6 +69,24 @@ def write_json_synced(path: Path, value: Any) -> None:
     write_text_synced(path, json_text(value))
 
 
+def append_jsonl_synced(path: Path, value: Any) -> None:
+    """Append one durable JSON line; callers serialize logical multi-file transactions."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(value, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        remaining = memoryview(payload)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise OSError(f"failed to append JSON line to {path}")
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    fsync_directory(path.parent)
+
+
 def replace_text_synced(path: Path, value: str) -> None:
     """Durably replace a text file without truncating the prior version in place."""
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -273,7 +273,7 @@ uv run knowledge-desk workspace list
 uv run knowledge-desk workspace get --id ws-thesis-macro
 ```
 
-Benchtest classifies claims as supported / challenged / untested / conflicted / pending and may write `benchtests/*.json` + a changelog line; it **does not** auto-edit pages. Link `observation_ids` on pages; label pure priors with `--prior`. MCP exposes read-only `list_workspaces` / `get_workspace`.
+Benchtest classifies claims as supported / challenged / untested / conflicted / pending and may write `benchtests/*.json` + a changelog line; it **does not** auto-edit pages. Persisted benchtests take the vault writer lock before reading the workspace and hold it through an atomic, fsynced report write and fsynced changelog append, so they cannot interleave with refine/add-page/init. `--no-persist` is read-only and remains unlocked. Link `observation_ids` on pages; label pure priors with `--prior`. MCP exposes read-only `list_workspaces` / `get_workspace`.
 
 ## Cross-MCP composition
 
