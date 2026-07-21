@@ -16,7 +16,9 @@ uv run knowledge-desk backup --out backups/my-desk.tar.gz
 uv run knowledge-desk restore backups/my-desk.tar.gz --vault /path/to/other-desk --force
 ```
 
-`init` creates empty data trees without overwriting existing files. `backup` archives durable data only (not `.venv`, `.staging`, `.locks`; index only with `--include-index`). `restore` refuses non-empty data trees unless `--force`. Prefer encrypting archives out of band (e.g. GPG) if they contain private sources.
+`init` creates empty data trees without overwriting existing files. `backup` takes the writer lock and archives a consistent snapshot of durable data only (not `.venv`, `.staging`, `.locks`; index only with `--include-index`). The output must be outside every archived root so an archive cannot recursively include itself.
+
+`restore` preflights the archive contract and member paths, extracts into same-filesystem staging, validates the complete candidate desk, and then publishes whole durable roots with rollback on failure. It refuses non-empty data trees unless `--force`; a forced restore first writes a timestamped `knowledge-desk-pre-restore-*.tar.gz` recovery archive beside the desk and reports its path. Immutable originals are therefore replaced only as part of a validated whole-root swap, never overwritten in place. If rollback itself cannot complete, the command reports the preserved staging recovery path. Prefer encrypting archives out of band (e.g. GPG) if they contain private sources.
 
 Migration from older checkouts that committed data dirs: keep local files, ensure `.gitignore` lists them, then `git rm -r --cached sources observations wiki memory inbox domains system/logs system/update-queue` and commit. Existing files remain on disk.
 
@@ -33,6 +35,7 @@ Mutation boundaries are explicit:
 | wiki evolve and workspace page changes | canonical revisable Markdown | writer lock; same-directory synced atomic replacement |
 | proposal apply/reject | canonical effects + review archive | one writer transaction; collision-safe archive publication |
 | subscription integration | inbox fetch + canonical source/wiki + operational cursor | each video is one writer transaction; briefing and cursor cannot interleave with another writer |
+| backup / restore | durable local snapshot and whole-root recovery | writer lock; verified archive; staged validation; rollback-capable root publication; forced restore creates a recovery archive |
 | proposal creation, fetch-only inbox files, maintainer ledgers | review/operational data | synced publication; never treated as canonical evidence |
 | index rebuild | disposable derived data | no canonical writer authority |
 
