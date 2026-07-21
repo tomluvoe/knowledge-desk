@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from knowledge_desk.index import index_path, search_index
 from knowledge_desk.observations import load_all_observations
-from knowledge_desk.util import normalized_content, parse_frontmatter, safe_filename, utc_now, write_json_synced, write_text_synced
+from knowledge_desk.util import (
+    normalized_content,
+    parse_frontmatter,
+    safe_filename,
+    sha256_text,
+    utc_now,
+    write_json_synced,
+    write_text_synced,
+)
 
 
 @dataclass
@@ -586,11 +595,13 @@ def _write_compile_from_ask_proposal(
 ) -> str:
     queue = vault_root / "system" / "update-queue"
     queue.mkdir(parents=True, exist_ok=True)
-    stamp = utc_now().replace(":", "").replace("-", "")
+    created_at = utc_now()
+    stamp = created_at.replace(":", "").replace("-", "")
+    proposal_token = uuid.uuid4().hex[:12]
     slug = safe_filename(re.sub(r"[^a-z0-9]+", "-", question.casefold())[:40].strip("-") or "compile")
-    name = safe_filename(f"compile-from-ask-{stamp}-{slug}.json")
+    name = safe_filename(f"compile-from-ask-{stamp}-{slug}-{proposal_token}.json")
     path = queue / name
-    day = utc_now()[:10].replace("-", "")
+    day = created_at[:10].replace("-", "")
 
     # Build observation stubs from source citations when subject/topic filters are real (not todo).
     proposed_observations: list[dict[str, Any]] = []
@@ -614,9 +625,11 @@ def _write_compile_from_ask_proposal(
             continue
         quote = str(citation.get("quote") or question)[:500]
         obs_slug = safe_filename(re.sub(r"[^a-z0-9]+", "-", quote.casefold())[:24].strip("-") or f"c{index}")
+        identity = f"{proposal_token}:{vault_id}:{index}:{quote}"
+        identity_hash = sha256_text(identity)[:12]
         stub = {
             "schema_version": "1.0.0",
-            "observation_id": f"obs-{day}-compile-{obs_slug}"[:80],
+            "observation_id": f"obs-{day}-compile-{obs_slug}-{identity_hash}"[:80],
             "subjects": [
                 subject_ref
                 or {"kind": "entity", "label": "TODO", "ref_id": "entity-todo"}
@@ -639,7 +652,7 @@ def _write_compile_from_ask_proposal(
             "publication_date": None,
             "expressed_at": None,
             "valid_at": None,
-            "recorded_at": utc_now(),
+            "recorded_at": created_at,
             "horizon": None,
             "freshness": {"as_of": None, "status": "unknown"},
             "evidence": [
@@ -663,7 +676,7 @@ def _write_compile_from_ask_proposal(
     payload = {
         "schema_version": "1.0.0",
         "kind": "compile_from_ask_proposal",
-        "created_at": utc_now(),
+        "created_at": created_at,
         "status": "proposed",
         "question": question,
         "ask_status": ask.status,
@@ -683,7 +696,8 @@ def _write_compile_from_ask_proposal(
         "run_wiki_evolve": True,
         "note": (
             "Review-only. Edit TODO subjects/topics before apply. "
-            "proposal apply appends complete observations then runs wiki evolve under the writer lock. "
+            "proposal apply preflights and appends all complete observations as one "
+            "all-or-nothing batch, then runs wiki evolve under the writer lock. "
             "MCP explore_ask never writes this automatically."
         ),
     }

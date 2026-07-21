@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from knowledge_desk.errors import KnowledgeDeskError, ValidationError
-from knowledge_desk.util import write_json_synced
+from knowledge_desk.util import fsync_directory, write_json_synced
 from knowledge_desk.validation import (
     load_schema,
     reference_identity_errors,
@@ -142,6 +142,111 @@ def _append_observation_unlocked(vault_root: Path, observation: dict[str, Any]) 
     finally:
         if staging_parent and staging_parent.exists():
             shutil.rmtree(staging_parent, ignore_errors=True)
+
+
+def _append_observations_atomic_unlocked(
+    vault_root: Path,
+    observations: list[dict[str, Any]],
+) -> list[ObserveResult]:
+    """Preflight and append a batch, rolling back every created file on failure."""
+    vault_root = vault_root.resolve()
+    observation_ids: set[str] = set()
+    planned: list[tuple[dict[str, Any], Path, ObserveResult, bool]] = []
+    staging_parent: Path | None = None
+
+    for index, observation in enumerate(observations):
+        observation_id = observation.get("observation_id")
+        if not isinstance(observation_id, str) or not observation_id:
+            raise ValidationError(f"proposed_observations/{index}: observation_id is required")
+        if observation_id in observation_ids:
+            raise ValidationError(
+                f"proposed_observations/{index}: duplicate observation_id in batch: {observation_id}"
+            )
+        observation_ids.add(observation_id)
+
+        errors = validate_observation_document(vault_root, observation)
+        if errors:
+            raise ValidationError(
+                f"proposed_observations/{index} failed validation: " + "; ".join(errors)
+            )
+        cycle_error = _relation_cycle_error(vault_root, observation)
+        if cycle_error:
+            raise ValidationError(f"proposed_observations/{index}: {cycle_error}")
+
+        final_path = observation_path(vault_root, observation_id)
+        result = ObserveResult(
+            observation_id=observation_id,
+            path=final_path.relative_to(vault_root).as_posix(),
+        )
+        noop = False
+        if final_path.exists():
+            existing = load_observation_document(final_path)
+            if existing != observation:
+                raise ValidationError(
+                    f"observation {observation_id} already exists with different content; "
+                    "the complete compile batch was not written"
+                )
+            result.status = "noop"
+            result.message = "identical observation already present; no files changed"
+            noop = True
+        planned.append((observation, final_path, result, noop))
+
+    creates = [item for item in planned if not item[3]]
+    if not creates:
+        return [item[2] for item in planned]
+
+    staging_root = vault_root / "system" / ".staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    staging_parent = Path(tempfile.mkdtemp(prefix="observe-batch-", dir=staging_root))
+    staged_paths: dict[str, Path] = {}
+    installed: list[Path] = []
+    try:
+        for observation, _final_path, _result, noop in planned:
+            if noop:
+                continue
+            observation_id = str(observation["observation_id"])
+            staged = staging_parent / f"{observation_id}.json"
+            write_json_synced(staged, observation)
+            staged_paths[observation_id] = staged
+
+        observations_root = vault_root / "observations"
+        observations_root.mkdir(parents=True, exist_ok=True)
+        try:
+            for observation, final_path, result, noop in planned:
+                if noop:
+                    continue
+                if final_path.exists() or final_path.is_symlink():
+                    raise ValidationError(
+                        f"observation {observation['observation_id']} appeared after preflight; "
+                        "the complete compile batch was not written"
+                    )
+                _publish_observation(staged_paths[str(observation["observation_id"])], final_path)
+                installed.append(final_path)
+                result.status = "created"
+                result.message = "observation appended in atomic compile batch"
+            fsync_directory(observations_root)
+        except Exception as exc:
+            rollback_errors: list[str] = []
+            for final_path in reversed(installed):
+                try:
+                    final_path.unlink()
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{final_path.name}: {rollback_exc}")
+            fsync_directory(observations_root)
+            if rollback_errors:
+                raise KnowledgeDeskError(
+                    "compile observation rollback requires manual recovery: "
+                    + "; ".join(rollback_errors)
+                ) from exc
+            raise
+        return [item[2] for item in planned]
+    finally:
+        if staging_parent.exists():
+            shutil.rmtree(staging_parent, ignore_errors=True)
+
+
+def _publish_observation(staged: Path, final_path: Path) -> None:
+    os.replace(staged, final_path)
 
 
 def append_observation_path(vault_root: Path, document_path: Path) -> ObserveResult:

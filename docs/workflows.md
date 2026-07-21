@@ -192,7 +192,7 @@ uv run knowledge-desk proposal apply system/update-queue/explore-ask-….json
 uv run knowledge-desk proposal reject system/update-queue/….json --reason "not ready"
 ```
 
-Proposals under `system/update-queue/` are review-only. `proposal apply` runs under the writer lock, may append observations or memory open questions when complete, and archives JSON under `system/update-queue/applied/` (or `rejected/`). Incomplete observation stubs with `entity-todo` / `topic-todo` are skipped until edited.
+Proposals under `system/update-queue/` are review-only. `proposal apply` runs under the writer lock, may append observations or memory open questions when complete, and archives JSON under `system/update-queue/applied/` (or `rejected/`). Incomplete single `explore ask` observation stubs with `entity-todo` / `topic-todo` are skipped until edited; compile-from-ask batches use the stricter all-or-nothing behavior below.
 
 ## Source-gap exploration
 
@@ -225,7 +225,7 @@ uv run knowledge-desk explore compile-from-ask "What does the note say about fro
 uv run knowledge-desk proposal apply system/update-queue/compile-from-ask-….json
 ```
 
-Outcomes: `proposed` (wiki missing/thin + evidence), `noop` (wiki already healthy), `insufficient_evidence` (open-question proposal). Apply appends complete observation stubs then runs `wiki evolve` under the writer lock. Stubs with `entity-todo` / `topic-todo` are skipped on apply.
+Outcomes: `proposed` (wiki missing/thin + evidence), `noop` (wiki already healthy), `insufficient_evidence` (open-question proposal). Compile proposal observation IDs include a per-proposal entropy token, so same-day proposals with similar excerpts do not collide. Apply uses all-or-nothing observation semantics under the writer lock: every stub must be an object, have resolved subjects/topics, validate, and pass ID/collision preflight before any observation is published. A staged publication failure rolls back every observation created by that batch; the proposal remains pending with a clear failure. Identical existing payloads are noops. Once the complete batch is created/noop, only those successful IDs (plus explicit proposal scope) feed `wiki evolve`.
 
 ## Wiki evolve and refine-validate
 
