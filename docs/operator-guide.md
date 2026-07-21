@@ -144,6 +144,8 @@ uv run knowledge-desk proposal reject path/to/proposal.json --reason "…"
 
 Canonical writes (ingest, observe, wiki evolve, proposal apply/reject) take an exclusive lock at `system/.locks/writer.lock`. MCP and query commands remain read-only and do not take the lock.
 
+`compile_from_ask_proposal` observation batches are all-or-nothing: applying first preflights every stub and collision, then publishes the staged batch. Invalid/TODO stubs or a publication failure write no observations and leave the proposal pending; identical existing observations are safe noops.
+
 Review checklist:
 
 - Provenance and evidence locators resolve

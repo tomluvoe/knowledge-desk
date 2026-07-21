@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import knowledge_desk.observe as observe_module
 from knowledge_desk.explore import compile_from_ask
 from knowledge_desk.ingest import IngestMetadata, ingest_file
 from knowledge_desk.layout import init_vault
@@ -32,6 +35,23 @@ class CompileFromAskTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def compile_proposal(self) -> tuple[Path, dict[str, object]]:
+        result = compile_from_ask(
+            self.vault,
+            "What does the note say about frog calls?",
+            subject="entity-example-wetland",
+            topic="topic-amphibian-activity",
+            propose=True,
+        )
+        self.assertEqual("proposed", result.status, result.message)
+        self.assertIsNotNone(result.proposal_path)
+        path = self.vault / str(result.proposal_path)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return path, payload
+
+    def write_proposal(self, path: Path, payload: dict[str, object]) -> None:
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     def test_evidence_missing_wiki_writes_compile_proposal(self) -> None:
         result = compile_from_ask(
@@ -131,6 +151,101 @@ class CompileFromAskTests(unittest.TestCase):
         self.assertTrue((self.vault / "wiki" / "entities" / "example-wetland.md").is_file()
                         or list((self.vault / "wiki" / "entities").glob("*.md")))
         self.assertTrue(list((self.vault / "wiki" / "topics").glob("*.md")))
+
+    def test_same_day_proposals_get_distinct_paths_and_observation_ids(self) -> None:
+        first_path, first = self.compile_proposal()
+        second_path, second = self.compile_proposal()
+
+        first_ids = {item["observation_id"] for item in first["proposed_observations"]}
+        second_ids = {item["observation_id"] for item in second["proposed_observations"]}
+        self.assertNotEqual(first_path, second_path)
+        self.assertTrue(first_ids)
+        self.assertTrue(second_ids)
+        self.assertTrue(first_ids.isdisjoint(second_ids))
+
+    def test_multi_stub_apply_publishes_complete_batch(self) -> None:
+        path, payload = self.compile_proposal()
+        first = payload["proposed_observations"][0]
+        second = copy.deepcopy(first)
+        second["observation_id"] += "-second"
+        second["assertion"] += " The second reviewed stub remains separately auditable."
+        payload["proposed_observations"].append(second)
+        self.write_proposal(path, payload)
+
+        result = apply_proposal(self.vault, path)
+
+        self.assertEqual("applied", result.status, result.message)
+        statuses = [item["status"] for item in result.details["observations"]]
+        self.assertEqual(["created", "created"], statuses)
+        for observation in (first, second):
+            self.assertTrue(
+                (self.vault / "observations" / f"{observation['observation_id']}.json").is_file()
+            )
+
+    def test_collision_with_different_content_fails_before_any_write(self) -> None:
+        path, payload = self.compile_proposal()
+        collision = payload["proposed_observations"][0]
+        existing = copy.deepcopy(collision)
+        existing["assertion"] = "An existing immutable observation has different content."
+        self.assertEqual("created", append_observation(self.vault, existing).status)
+        first = copy.deepcopy(collision)
+        first["observation_id"] += "-first"
+        payload["proposed_observations"] = [first, collision]
+        self.write_proposal(path, payload)
+
+        result = apply_proposal(self.vault, path)
+
+        self.assertEqual("failed", result.status)
+        self.assertIn("complete compile batch was not written", result.message)
+        self.assertFalse(
+            (self.vault / "observations" / f"{first['observation_id']}.json").exists()
+        )
+        self.assertTrue(path.is_file())
+        persisted = json.loads(
+            (self.vault / "observations" / f"{collision['observation_id']}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(existing, persisted)
+
+    def test_mid_publication_failure_rolls_back_batch_and_keeps_proposal(self) -> None:
+        path, payload = self.compile_proposal()
+        first = payload["proposed_observations"][0]
+        second = copy.deepcopy(first)
+        second["observation_id"] += "-second"
+        payload["proposed_observations"].append(second)
+        self.write_proposal(path, payload)
+        actual_publish = observe_module._publish_observation
+        publish_count = 0
+
+        def fail_second_publish(staged: Path, final_path: Path) -> None:
+            nonlocal publish_count
+            publish_count += 1
+            if publish_count == 2:
+                raise OSError("injected batch publication failure")
+            actual_publish(staged, final_path)
+
+        with patch(
+            "knowledge_desk.observe._publish_observation",
+            side_effect=fail_second_publish,
+        ):
+            result = apply_proposal(self.vault, path)
+
+        self.assertEqual("failed", result.status)
+        self.assertIn("injected batch publication failure", result.message)
+        self.assertEqual([], list((self.vault / "observations").glob("*.json")))
+        self.assertEqual([], list((self.vault / "system" / ".staging").glob("observe-batch-*")))
+        self.assertTrue(path.is_file())
+
+    def test_identical_existing_observation_is_noop_in_batch(self) -> None:
+        path, payload = self.compile_proposal()
+        observation = payload["proposed_observations"][0]
+        self.assertEqual("created", append_observation(self.vault, observation).status)
+
+        result = apply_proposal(self.vault, path)
+
+        self.assertEqual("applied", result.status, result.message)
+        self.assertEqual("noop", result.details["observations"][0]["status"])
 
 
 if __name__ == "__main__":

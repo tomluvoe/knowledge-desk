@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from knowledge_desk.errors import KnowledgeDeskError, ValidationError
-from knowledge_desk.observe import _append_observation_unlocked
+from knowledge_desk.observe import (
+    _append_observation_unlocked,
+    _append_observations_atomic_unlocked,
+)
 from knowledge_desk.util import (
     json_text,
     render_frontmatter,
@@ -238,7 +241,7 @@ def _apply_explore_ask(vault_root: Path, payload: dict[str, Any]) -> dict[str, o
 
 
 def _apply_compile_from_ask(vault_root: Path, payload: dict[str, Any]) -> dict[str, object]:
-    """Apply compile-from-ask: observations (if complete) then optional wiki evolve scope."""
+    """Apply compile-from-ask after all complete observation stubs pass preflight."""
     details: dict[str, object] = {"action": "compile_from_ask"}
     observations = payload.get("proposed_observations")
     if not isinstance(observations, list):
@@ -247,26 +250,25 @@ def _apply_compile_from_ask(vault_root: Path, payload: dict[str, Any]) -> dict[s
         if isinstance(single, dict):
             observations = [single]
 
-    applied_obs: list[dict[str, object]] = []
-    for observation in observations:
+    complete_observations: list[dict[str, Any]] = []
+    for index, observation in enumerate(observations):
         if not isinstance(observation, dict):
-            continue
+            raise ValidationError(f"proposed_observations/{index} must be an object")
         subjects = observation.get("subjects") if isinstance(observation.get("subjects"), list) else []
         topics = observation.get("topics") if isinstance(observation.get("topics"), list) else []
         subject_ids = [s.get("ref_id") for s in subjects if isinstance(s, dict)]
         topic_ids = [t.get("ref_id") for t in topics if isinstance(t, dict)]
         if "entity-todo" in subject_ids or "topic-todo" in topic_ids:
-            applied_obs.append(
-                {
-                    "status": "skipped",
-                    "message": "observation stub still has TODO subjects/topics; edit before apply",
-                }
+            raise ValidationError(
+                f"proposed_observations/{index} still has TODO subjects/topics; "
+                "edit the proposal before applying the all-or-nothing batch"
             )
-            continue
-        obs_result = _append_observation_unlocked(vault_root, observation)
-        if obs_result.status not in {"created", "noop"}:
-            raise ValidationError(obs_result.message)
-        applied_obs.append(obs_result.to_dict())
+        complete_observations.append(observation)
+
+    applied_obs = [
+        result.to_dict()
+        for result in _append_observations_atomic_unlocked(vault_root, complete_observations)
+    ]
     details["observations"] = applied_obs
 
     evolve_scope = payload.get("wiki_evolve") if isinstance(payload.get("wiki_evolve"), dict) else {}
