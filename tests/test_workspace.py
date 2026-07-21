@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from knowledge_desk.ingest import IngestMetadata, ingest_file
 from knowledge_desk.layout import init_vault
@@ -160,6 +161,28 @@ class WorkspaceTests(unittest.TestCase):
         )
         report = validate_vault(self.vault)
         self.assertTrue(report.valid, "\n".join(report.errors))
+
+    def test_refine_failure_preserves_prior_workspace_page(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Crash-safe workspace",
+            workspace_id="ws-crash-safe",
+            statement="Prior complete stance.",
+        )
+        spine = workspaces_dir(self.vault) / "ws-crash-safe" / "workspace.md"
+        before = spine.read_bytes()
+
+        with patch("knowledge_desk.util.os.replace", side_effect=OSError("simulated crash")):
+            result = refine_workspace(
+                self.vault,
+                "ws-crash-safe",
+                summary="Attempt replacement",
+                body="# Changed\n\nReplacement that must not truncate the prior page.\n",
+            )
+
+        self.assertEqual("failed", result.status)
+        self.assertIn("simulated crash", result.message)
+        self.assertEqual(before, spine.read_bytes())
 
     def test_validate_rejects_misnamed_workspace_spine_and_page(self) -> None:
         init_workspace(

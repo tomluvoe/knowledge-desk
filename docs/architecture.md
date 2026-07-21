@@ -17,6 +17,8 @@ A source ID is `src-` plus the first 24 hexadecimal characters of its SHA-256 co
 
 Canonical publication is directory-atomic: extraction occurs in a same-filesystem staging directory, all files validate, and the completed directory is renamed into `sources/`. The append-only JSON Lines ingest log is written only after publication. A log-write failure is reported honestly without rolling back valid canonical evidence.
 
+Revisable canonical Markdown and JSON are never truncated in place. Writers create and fsync a same-directory temporary file, atomically replace the prior path, and sync the containing directory. Multi-step canonical mutations are serialized by the vault writer lock; platforms without a real cross-process lock fail explicitly.
+
 ## Adapter boundary
 
 Ingestion adapters return normalized Markdown, extraction status, warnings, and locator metadata. The registry selects adapters by extension. Future HTML, office, audio/video, and transcript adapters can use the same content-derived source identity, manifest, normalized note, and evidence-locator model.

@@ -22,7 +22,21 @@ Migration from older checkouts that committed data dirs: keep local files, ensur
 
 ## Concurrency and single-writer
 
-v0.1 serializes **canonical writes** (ingest publish, observe append, wiki evolve, proposal apply/reject) through an exclusive lock at `system/.locks/writer.lock` (gitignored). Concurrent readers (`validate`, `lint`, `search`, MCP tools) do not take the lock. If a writer cannot acquire the lock within ~30s it fails clearly rather than interleaving publishes.
+v0.1 serializes **canonical writes** through an exclusive, process-wide lock at `system/.locks/writer.lock` (gitignored). The lock is re-entrant within one writer thread so a multi-step operation can safely call ingestion or wiki compilation. Concurrent readers (`validate`, `lint`, `search`, MCP tools) do not take the lock. If a writer cannot acquire it within ~30s, or the platform cannot provide a real `flock`-style cross-process lock, the operation fails clearly rather than running without exclusion.
+
+Mutation boundaries are explicit:
+
+| Mutation | Classification | Publication rule |
+|---|---|---|
+| ingest / re-normalize | canonical evidence + append-only log | writer lock; stage and replace; immutable originals never rewritten |
+| observe | canonical append-only record | writer lock; staged publication |
+| wiki evolve and workspace page changes | canonical revisable Markdown | writer lock; same-directory synced atomic replacement |
+| proposal apply/reject | canonical effects + review archive | one writer transaction; collision-safe archive publication |
+| subscription integration | inbox fetch + canonical source/wiki + operational cursor | each video is one writer transaction; briefing and cursor cannot interleave with another writer |
+| proposal creation, fetch-only inbox files, maintainer ledgers | review/operational data | synced publication; never treated as canonical evidence |
+| index rebuild | disposable derived data | no canonical writer authority |
+
+An interrupted subscription integration is retryable. The cursor advances only after source ingestion and atomic briefing publication succeed. If a later cursor write fails, the next poll reuses the content-addressed source as an ingest no-op and replaces the deterministic briefing path before advancing the cursor; it does not duplicate evidence.
 
 ## Ingest
 

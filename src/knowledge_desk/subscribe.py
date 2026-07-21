@@ -14,7 +14,15 @@ from urllib.parse import parse_qs, urlparse
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.layout import init_vault
 from knowledge_desk.perspective import perspective_at, perspective_timeline
-from knowledge_desk.util import SCHEMA_VERSION, render_frontmatter, safe_filename, utc_now, write_json_synced, write_text_synced
+from knowledge_desk.util import (
+    SCHEMA_VERSION,
+    render_frontmatter,
+    replace_json_synced,
+    replace_text_synced,
+    safe_filename,
+    utc_now,
+)
+from knowledge_desk.writer import vault_write_lock
 from knowledge_desk.youtube_transcript import (
     TranscriptFetcher,
     canonical_watch_url,
@@ -177,9 +185,6 @@ def add_subscription(
     vault_root = vault_root.resolve()
     _validate_since(since)
     init_vault(vault_root, write_readmes=False)
-    path = subscriptions_dir(vault_root)
-    path.mkdir(parents=True, exist_ok=True)
-
     discoverer = discoverer or YoutubeAtomDiscoverer()
     # Resolve id once (network) by probing with a temporary subscription shell.
     kind, resolved = resolve_youtube_feed_target(
@@ -210,10 +215,13 @@ def add_subscription(
         # Still save if resolution worked; discovery can fail transiently — re-raise only if unresolved
         if not resolved:
             raise
-    dest = path / f"{subscription_id}.json"
-    if dest.exists():
-        raise KnowledgeDeskError(f"subscription already exists: {subscription_id}")
-    write_json_synced(dest, subscription.to_dict())
+    with vault_write_lock(vault_root):
+        path = subscriptions_dir(vault_root)
+        path.mkdir(parents=True, exist_ok=True)
+        dest = path / f"{subscription_id}.json"
+        if dest.exists():
+            raise KnowledgeDeskError(f"subscription already exists: {subscription_id}")
+        replace_json_synced(dest, subscription.to_dict())
     return {
         "operation": "subscribe.add",
         "status": "created",
@@ -252,9 +260,14 @@ def load_subscription(vault_root: Path, subscription_id: str) -> Subscription:
 
 
 def save_subscription(vault_root: Path, subscription: Subscription) -> Path:
+    with vault_write_lock(vault_root):
+        return _save_subscription_unlocked(vault_root, subscription)
+
+
+def _save_subscription_unlocked(vault_root: Path, subscription: Subscription) -> Path:
     path = subscriptions_dir(vault_root) / f"{subscription.subscription_id}.json"
     subscription.updated_at = utc_now()
-    write_json_synced(path, subscription.to_dict())
+    replace_json_synced(path, subscription.to_dict())
     return path
 
 
@@ -329,22 +342,28 @@ def _poll_one(
     errors: list[dict[str, object]] = []
     for video in candidates:
         try:
-            # ingest/observe paths take the write lock themselves — do not nest locks.
-            item_result = _integrate_video(
-                vault_root,
-                subscription,
-                video,
-                transcript_fetcher=transcript_fetcher,
-            )
-            integrated.append(item_result)
-            if video.video_id not in subscription.processed_video_ids:
-                subscription.processed_video_ids.append(video.video_id)
-            save_subscription(vault_root, subscription)
+            with vault_write_lock(vault_root):
+                current = load_subscription(vault_root, subscription.subscription_id)
+                if video.video_id in current.processed_video_ids:
+                    subscription = current
+                    continue
+                item_result = _integrate_video(
+                    vault_root,
+                    current,
+                    video,
+                    transcript_fetcher=transcript_fetcher,
+                )
+                current.processed_video_ids.append(video.video_id)
+                _save_subscription_unlocked(vault_root, current)
+                subscription = current
+                integrated.append(item_result)
         except (KnowledgeDeskError, OSError, ValueError) as exc:
             errors.append({"video_id": video.video_id, "title": video.title, "error": str(exc)})
 
-    subscription.last_polled_at = utc_now()
-    save_subscription(vault_root, subscription)
+    with vault_write_lock(vault_root):
+        current = load_subscription(vault_root, subscription.subscription_id)
+        current.last_polled_at = utc_now()
+        _save_subscription_unlocked(vault_root, current)
     return {
         "subscription_id": subscription.subscription_id,
         "status": "ok",
@@ -418,9 +437,13 @@ def _write_delta_briefing(
     ingest: dict[str, object],
 ) -> str:
     """Write a cited briefing note: new video + delta vs prior corpus for the subscription subject."""
-    day = (video.published or utc_now())[:10].replace("-", "")
-    wiki_id = f"wiki-synthesis-{safe_filename(subscription.subscription_id)}-{video.video_id[:8]}"
-    path = vault_root / "wiki" / "syntheses" / f"{safe_filename(subscription.subscription_id)}-{video.video_id}.md"
+    identity_slug = re.sub(
+        r"[^a-z0-9]+",
+        "-",
+        f"{subscription.subscription_id}-{video.video_id[:8]}".casefold(),
+    ).strip("-")
+    wiki_id = f"wiki-synthesis-{identity_slug}"
+    path = vault_root / "wiki" / "syntheses" / f"synthesis-{identity_slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
 
     prior_ids = [vid for vid in subscription.processed_video_ids if vid != video.video_id]
@@ -503,7 +526,7 @@ def _write_delta_briefing(
     # If evidence empty, still write a page that refine-validate may warn about — better attach nothing than fake hashes
     if not evidence:
         metadata["evidence"] = []
-    write_text_synced(path, render_frontmatter(metadata) + "\n" + body)
+    replace_text_synced(path, render_frontmatter(metadata) + "\n" + body)
     return path.relative_to(vault_root).as_posix()
 
 

@@ -18,10 +18,10 @@ from knowledge_desk.util import (
     SCHEMA_VERSION,
     parse_frontmatter,
     render_frontmatter,
+    replace_text_synced,
     safe_filename,
     utc_now,
     write_json_synced,
-    write_text_synced,
 )
 
 
@@ -129,7 +129,7 @@ def init_workspace(
                 "extensions": {"knowledge.desk.workspace": {"protected_from_auto_evolve": True}},
             }
             spine = root / "workspace.md"
-            write_text_synced(spine, render_frontmatter(meta) + "\n" + body)
+            replace_text_synced(spine, render_frontmatter(meta) + "\n" + body)
             _append_changelog(
                 root,
                 event="created",
@@ -289,7 +289,7 @@ def add_page(
                 "extensions": {},
             }
             content = (body or f"# {title.strip()}\n\n_User-owned workspace page. Not source evidence._\n").strip() + "\n"
-            write_text_synced(path, render_frontmatter(meta) + "\n" + content)
+            replace_text_synced(path, render_frontmatter(meta) + "\n" + content)
             _append_changelog(
                 root,
                 event="page_added",
@@ -361,7 +361,7 @@ def refine_workspace(
                 )
             meta["updated_at"] = now
             new_body = body if body is not None else old_body
-            write_text_synced(path, render_frontmatter(meta) + "\n" + new_body.lstrip("\n"))
+            replace_text_synced(path, render_frontmatter(meta) + "\n" + new_body.lstrip("\n"))
             _append_changelog(
                 root,
                 event="refined",
@@ -532,7 +532,7 @@ def _refine_unlocked(
         meta["observation_ids"] = sorted({i for i in prior if isinstance(i, str)} | set(observation_ids))
     meta["updated_at"] = now
     new_body = body if body is not None else old_body
-    write_text_synced(path, render_frontmatter(meta) + "\n" + new_body.lstrip("\n"))
+    replace_text_synced(path, render_frontmatter(meta) + "\n" + new_body.lstrip("\n"))
     _append_changelog(
         root,
         event="refined",

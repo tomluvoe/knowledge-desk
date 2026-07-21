@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import re
+import stat
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,38 @@ def write_text_synced(path: Path, value: str) -> None:
 
 def write_json_synced(path: Path, value: Any) -> None:
     write_text_synced(path, json_text(value))
+
+
+def replace_text_synced(path: Path, value: str) -> None:
+    """Durably replace a text file without truncating the prior version in place."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    os.close(descriptor)
+    staged = Path(temporary_name)
+    try:
+        write_text_synced(staged, value)
+        mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
+        staged.chmod(mode)
+        os.replace(staged, path)
+        _fsync_directory(path.parent)
+    finally:
+        if staged.exists():
+            staged.unlink()
+
+
+def replace_json_synced(path: Path, value: Any) -> None:
+    replace_text_synced(path, json_text(value))
+
+
+def _fsync_directory(path: Path) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def confined_file(root: Path, candidate: Path) -> Path | None:

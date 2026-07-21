@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from knowledge_desk.ingest import IngestMetadata, ingest_file
 from knowledge_desk.observe import append_observation
@@ -195,6 +196,28 @@ class WikiEvolveTests(unittest.TestCase):
                 for error in report.errors
             )
         )
+
+    def test_evolve_failure_preserves_prior_wiki_page(self) -> None:
+        evolve_wiki(self.vault)
+        entity = self.vault / "wiki" / "entities" / "example-wetland.md"
+        before = entity.read_bytes()
+        original = json.loads(
+            (self.vault / "observations" / "obs-20260718-frog-calls.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original["observation_id"] = "obs-20260719-frog-calls-update"
+        original["assertion"] = "Frog calls remained detectable on the next observation."
+        original["recorded_at"] = "2026-07-21T10:05:00Z"
+        original["valid_at"] = "2026-07-19T20:00:00Z"
+        self.assertEqual("created", append_observation(self.vault, original).status)
+
+        with patch("knowledge_desk.util.os.replace", side_effect=OSError("simulated crash")):
+            result = evolve_wiki(self.vault)
+
+        self.assertEqual("failed", result.status)
+        self.assertIn("simulated crash", result.message)
+        self.assertEqual(before, entity.read_bytes())
 
 
 if __name__ == "__main__":

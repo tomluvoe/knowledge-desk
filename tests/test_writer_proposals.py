@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from knowledge_desk.explore import explore_ask, explore_gaps
+from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path
 from knowledge_desk.proposals import apply_proposal, list_proposals, reject_proposal
-from knowledge_desk.writer import vault_write_lock
+from knowledge_desk.util import replace_text_synced
+from knowledge_desk.writer import vault_write_lock, vault_write_lock_held
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +56,66 @@ class WriterAndProposalTests(unittest.TestCase):
         with vault_write_lock(self.vault) as lock_path:
             self.assertTrue(lock_path.is_file())
             self.assertIn("writer.lock", lock_path.as_posix())
+
+    def test_write_lock_is_reentrant_and_unsupported_platform_fails_clearly(self) -> None:
+        with vault_write_lock(self.vault) as outer:
+            self.assertTrue(vault_write_lock_held(self.vault))
+            with vault_write_lock(self.vault) as inner:
+                self.assertEqual(outer, inner)
+                self.assertTrue(vault_write_lock_held(self.vault))
+        self.assertFalse(vault_write_lock_held(self.vault))
+
+        with patch(
+            "knowledge_desk.writer._load_fcntl",
+            side_effect=KnowledgeDeskError("cross-process locking unavailable"),
+        ):
+            with self.assertRaisesRegex(KnowledgeDeskError, "cross-process locking unavailable"):
+                with vault_write_lock(self.vault):
+                    pass
+
+    def test_write_lock_excludes_another_process(self) -> None:
+        script = (
+            "import sys\n"
+            "from pathlib import Path\n"
+            "from knowledge_desk.writer import vault_write_lock\n"
+            "with vault_write_lock(Path(sys.argv[1])):\n"
+            "    print('locked', flush=True)\n"
+            "    sys.stdin.readline()\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", script, str(self.vault)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            assert process.stdout is not None
+            self.assertEqual("locked", process.stdout.readline().strip())
+            with self.assertRaisesRegex(KnowledgeDeskError, "timed out waiting"):
+                with vault_write_lock(self.vault, timeout_seconds=0.05):
+                    pass
+            assert process.stdin is not None
+            process.stdin.write("release\n")
+            process.stdin.flush()
+            _, stderr = process.communicate(timeout=5)
+            self.assertEqual(0, process.returncode, stderr)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+
+    def test_atomic_replace_failure_preserves_prior_file(self) -> None:
+        target = self.vault / "wiki" / "topics" / "prior.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("prior complete page\n", encoding="utf-8")
+
+        with patch("knowledge_desk.util.os.replace", side_effect=OSError("simulated crash")):
+            with self.assertRaisesRegex(OSError, "simulated crash"):
+                replace_text_synced(target, "replacement page\n")
+
+        self.assertEqual("prior complete page\n", target.read_text(encoding="utf-8"))
+        self.assertEqual([], list(target.parent.glob(f".{target.name}.*")))
 
     def test_proposal_reject_and_apply_open_question(self) -> None:
         source = self.vault / "ecology-field-note.txt"
