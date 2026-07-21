@@ -24,6 +24,8 @@ def decode_utf8(path: Path) -> tuple[str, list[str]]:
 
 class TextAdapter:
     extensions = frozenset({".txt"})
+    adapter_id = "knowledge-desk.text"
+    adapter_version = "1"
 
     def extract(self, path: Path) -> ExtractionResult:
         text, warnings = decode_utf8(path)

@@ -73,6 +73,19 @@ def confined_file(root: Path, candidate: Path) -> Path | None:
     return resolved
 
 
+def normalization_for_path(manifest: dict[str, Any], normalized_path: str) -> dict[str, Any] | None:
+    normalization = manifest.get("normalization")
+    if not isinstance(normalization, dict):
+        return None
+    revisions = normalization.get("revisions")
+    if not isinstance(revisions, list):
+        return None
+    for revision in revisions:
+        if isinstance(revision, dict) and revision.get("normalized_path") == normalized_path:
+            return revision
+    return None
+
+
 def render_frontmatter(metadata: dict[str, Any]) -> str:
     lines = ["---"]
     for key, value in metadata.items():

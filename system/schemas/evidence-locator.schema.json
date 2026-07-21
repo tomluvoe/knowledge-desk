@@ -9,7 +9,7 @@
     "schema_version": {"const": "1.0.0"},
     "source_id": {"type": "string", "pattern": "^src-[0-9a-f]{24}$"},
     "source_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/normalized\\.md$"},
+    "normalized_path": {"type": "string", "pattern": "^sources/src-[0-9a-f]{24}/(?:normalized\\.md|normalizations/norm-[0-9a-f]{16}\\.md)$"},
     "locator_kind": {"enum": ["pdf_page", "markdown_heading", "line_range", "block", "media_timestamp"]},
     "selector": {"type": "object"},
     "quote_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

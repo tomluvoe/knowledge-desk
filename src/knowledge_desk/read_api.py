@@ -10,7 +10,13 @@ from knowledge_desk.explore import explore_ask, explore_gaps
 from knowledge_desk.index import rebuild_index, search_index
 from knowledge_desk.observations import ObservationQuery, get_observation, list_observations
 from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
-from knowledge_desk.util import confined_file, normalized_content, parse_frontmatter
+from knowledge_desk.util import (
+    confined_file,
+    normalization_for_path,
+    normalized_content,
+    parse_frontmatter,
+    sha256_file,
+)
 from knowledge_desk.validation import validate_locator
 
 
@@ -115,8 +121,20 @@ def get_source(vault_root: Path, source_id: str) -> dict[str, Any]:
             "source_id": source_id,
             "message": "source not found",
         }
-    expected_normalized = f"sources/{source_id}/normalized.md"
-    if manifest.get("source_id") != source_id or manifest.get("normalized_path") != expected_normalized:
+    normalized_path = manifest.get("normalized_path")
+    revision = (
+        normalization_for_path(manifest, normalized_path)
+        if isinstance(normalized_path, str)
+        else None
+    )
+    normalization = manifest.get("normalization")
+    current_revision = normalization.get("current_revision") if isinstance(normalization, dict) else None
+    if (
+        manifest.get("source_id") != source_id
+        or revision is None
+        or revision.get("revision_id") != current_revision
+        or revision.get("normalized_hash") != manifest.get("normalized_hash")
+    ):
         return {
             "api_version": API_VERSION,
             "success": False,
@@ -124,7 +142,7 @@ def get_source(vault_root: Path, source_id: str) -> dict[str, Any]:
             "manifest": manifest,
             "message": "source manifest identity or normalized_path is invalid",
         }
-    note_path = confined_file(source_root, vault_root / expected_normalized)
+    note_path = confined_file(source_root, vault_root / normalized_path)
     if note_path is None:
         return {
             "api_version": API_VERSION,
@@ -132,6 +150,14 @@ def get_source(vault_root: Path, source_id: str) -> dict[str, Any]:
             "source_id": source_id,
             "manifest": manifest,
             "message": "normalized note is missing or outside its source directory",
+        }
+    if f"sha256:{sha256_file(note_path)}" != revision.get("normalized_hash"):
+        return {
+            "api_version": API_VERSION,
+            "success": False,
+            "source_id": source_id,
+            "manifest": manifest,
+            "message": "normalized note integrity check failed",
         }
     body = ""
     try:

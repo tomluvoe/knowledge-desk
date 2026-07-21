@@ -12,6 +12,8 @@ from knowledge_desk.util import CONTENT_END, CONTENT_START
 
 class PdfAdapter:
     extensions = frozenset({".pdf"})
+    adapter_id = "knowledge-desk.pdf"
+    adapter_version = "1"
     minimum_total_text = 80
     minimum_average_text_per_page = 20
 

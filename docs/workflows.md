@@ -30,6 +30,8 @@ Run `knowledge-desk ingest <file-or-directory>`. Directory ingestion is **non-re
 
 The operation hashes first, checks duplicates, extracts in staging, preserves the original bytes, writes the manifest and normalized note, validates them, publishes atomically, and appends an ingest-log event. Exit status is nonzero if any requested input fails. JSON output makes no-op, created, revision, and failed states distinguishable.
 
+Normalized notes carry a manifest digest and adapter/version history. Ordinary re-ingestion of identical bytes remains a no-op. Run `knowledge-desk ingest <same-file> --renormalize` to explicitly append an immutable, auditable normalization revision and update the manifest's current pointer, even when the adapter output is byte-for-byte unchanged. Existing locator paths remain registered and resolvable. Older manifests without integrity history can be upgraded explicitly with the same command.
+
 ## Fetch web pages
 
 ```bash

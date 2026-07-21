@@ -10,6 +10,8 @@ from knowledge_desk.util import CONTENT_END, CONTENT_START
 
 class MarkdownAdapter:
     extensions = frozenset({".md", ".markdown"})
+    adapter_id = "knowledge-desk.markdown"
+    adapter_version = "1"
 
     def extract(self, path: Path) -> ExtractionResult:
         text, warnings = decode_utf8(path)

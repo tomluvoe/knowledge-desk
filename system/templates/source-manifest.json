@@ -8,6 +8,23 @@
   "language": null,
   "media_type": "text/plain",
   "normalized_path": "sources/<source-id>/normalized.md",
+  "normalized_hash": "sha256:<normalized-note-64-lowercase-hex>",
+  "normalization": {
+    "current_revision": "norm-<16-lowercase-hex>",
+    "revisions": [
+      {
+        "adapter": "knowledge-desk.<adapter>",
+        "adapter_version": "<version>",
+        "created_at": "<RFC3339 timestamp>",
+        "extraction_status": "complete",
+        "normalized_hash": "sha256:<normalized-note-64-lowercase-hex>",
+        "normalized_path": "sources/<source-id>/normalized.md",
+        "revision_id": "norm-<16-lowercase-hex>",
+        "supersedes": null,
+        "warnings": []
+      }
+    ]
+  },
   "original_filename": "<filename>",
   "original_path": "sources/<source-id>/original/<filename>",
   "publication_date": null,

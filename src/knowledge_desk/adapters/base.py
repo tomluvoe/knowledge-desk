@@ -18,6 +18,8 @@ class ExtractionResult:
 
 class IngestionAdapter(Protocol):
     extensions: frozenset[str]
+    adapter_id: str
+    adapter_version: str
 
     def extract(self, path: Path) -> ExtractionResult:
         """Normalize an untrusted local source without executing its content."""
