@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 from knowledge_desk.observations import load_all_observations
-from knowledge_desk.util import normalized_content, parse_frontmatter
+from knowledge_desk.util import confined_file, normalized_content, parse_frontmatter
 
 
 INDEX_RELATIVE_PATH = "system/.index/vault.sqlite"
@@ -255,7 +256,11 @@ def _insert(
 
 def _index_sources(connection: sqlite3.Connection, vault_root: Path) -> int:
     count = 0
-    for manifest_path in sorted((vault_root / "sources").glob("src-*/manifest.json")):
+    sources_root = vault_root / "sources"
+    for candidate in sorted(sources_root.glob("src-*/manifest.json")):
+        manifest_path = confined_file(sources_root, candidate)
+        if manifest_path is None:
+            continue
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -263,13 +268,19 @@ def _index_sources(connection: sqlite3.Connection, vault_root: Path) -> int:
         if not isinstance(manifest, dict):
             continue
         source_id = str(manifest.get("source_id") or manifest_path.parent.name)
-        note_path = vault_root / str(manifest.get("normalized_path") or f"sources/{source_id}/normalized.md")
+        if not re.fullmatch(r"src-[0-9a-f]{24}", source_id):
+            continue
+        expected_normalized = f"sources/{source_id}/normalized.md"
+        if manifest_path.parent.name != source_id or manifest.get("normalized_path") != expected_normalized:
+            continue
+        note_path = confined_file(manifest_path.parent, vault_root / expected_normalized)
         body = ""
-        try:
-            _, note_body = parse_frontmatter(note_path.read_text(encoding="utf-8"))
-            body = normalized_content(note_body)
-        except (OSError, UnicodeDecodeError, ValueError):
-            body = ""
+        if note_path is not None:
+            try:
+                _, note_body = parse_frontmatter(note_path.read_text(encoding="utf-8"))
+                body = normalized_content(note_body)
+            except (OSError, UnicodeDecodeError, ValueError):
+                body = ""
         _insert(
             connection,
             vault_id=source_id,
@@ -356,7 +367,10 @@ def _index_markdown_layer(
     if not root.is_dir():
         return 0
     count = 0
-    for path in sorted(root.glob("**/*.md")):
+    for candidate in sorted(root.glob("**/*.md")):
+        path = confined_file(root, candidate)
+        if path is None:
+            continue
         if path.name == "README.md":
             continue
         try:

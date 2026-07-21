@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.observe import load_observation_document, observation_path
+from knowledge_desk.util import confined_file
+
+
+OBSERVATION_ID_PATTERN = re.compile(r"^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 @dataclass(frozen=True)
@@ -44,7 +49,12 @@ def iter_observation_paths(vault_root: Path) -> Iterable[Path]:
     root = vault_root.resolve() / "observations"
     if not root.is_dir():
         return []
-    return sorted(path for path in root.glob("**/*.json") if path.is_file())
+    paths: list[Path] = []
+    for candidate in sorted(root.glob("**/*.json")):
+        path = confined_file(root, candidate)
+        if path is not None:
+            paths.append(path)
+    return paths
 
 
 def load_all_observations(vault_root: Path) -> list[ObservationRecord]:
@@ -66,8 +76,10 @@ def load_all_observations(vault_root: Path) -> list[ObservationRecord]:
 
 def get_observation(vault_root: Path, observation_id: str) -> ObservationRecord | None:
     vault_root = vault_root.resolve()
-    path = observation_path(vault_root, observation_id)
-    if path.is_file():
+    if not OBSERVATION_ID_PATTERN.fullmatch(observation_id):
+        return None
+    path = confined_file(vault_root / "observations", observation_path(vault_root, observation_id))
+    if path is not None:
         return ObservationRecord(
             path=path.relative_to(vault_root).as_posix(),
             observation=load_observation_document(path),

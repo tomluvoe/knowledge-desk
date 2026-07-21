@@ -135,6 +135,20 @@ class IndexTests(unittest.TestCase):
         self.assertTrue(list((self.vault / "observations").glob("**/*.json")))
         self.assertEqual("rebuilt", rebuild_index(self.vault).status)
 
+    def test_rebuild_does_not_read_manifest_paths_outside_source_directory(self) -> None:
+        manifest_path = next((self.vault / "sources").glob("src-*/manifest.json"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["normalized_path"] = "../outside.md"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.vault / "outside.md").write_text(
+            '---\ntitle: "Outside"\n---\n\noutside-vault-secret-marker\n',
+            encoding="utf-8",
+        )
+
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+        result = search_index(self.vault, "outside-vault-secret-marker")
+        self.assertEqual(0, result.count)
+
 
 if __name__ == "__main__":
     unittest.main()

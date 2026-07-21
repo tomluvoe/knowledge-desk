@@ -24,7 +24,7 @@ services:
         target: /vault
         read_only: true
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     command:
       [
         "uv",

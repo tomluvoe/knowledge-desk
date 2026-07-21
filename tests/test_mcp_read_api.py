@@ -153,6 +153,68 @@ class ReadOnlyMcpApiTests(unittest.TestCase):
         self.assertTrue(obs["success"])
         self.assertEqual("explicit_statement", obs["observations"][0]["statement_basis"])
 
+    def test_read_api_rejects_out_of_vault_and_out_of_layer_paths(self) -> None:
+        source_id = str(self.ingested.source_id)
+        source_manifest = self.vault / "sources" / source_id / "manifest.json"
+        original_manifest = source_manifest.read_text(encoding="utf-8")
+        manifest = json.loads(original_manifest)
+        manifest["normalized_path"] = "../outside.md"
+        source_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        invalid_source = read_api.get_source(self.vault, source_id)
+        self.assertFalse(invalid_source["success"])
+        self.assertIn("normalized_path", invalid_source["message"])
+        source_manifest.write_text(original_manifest, encoding="utf-8")
+
+        self.assertFalse(read_api.get_source(self.vault, "../../outside")["success"])
+        self.assertFalse(read_api.get_observations(self.vault, observation_id="../../outside")["success"])
+        self.assertFalse(
+            read_api.get_synthesis(self.vault, f"sources/{source_id}/normalized.md")["success"]
+        )
+
+        with tempfile.TemporaryDirectory() as outside_name:
+            outside = Path(outside_name)
+            secret = outside / "secret.md"
+            secret.write_text(
+                '---\ntitle: "Outside"\n---\n\noutside-vault-secret-marker\n',
+                encoding="utf-8",
+            )
+            traversal = f"../{outside.name}/secret.md"
+            synthesis = read_api.get_synthesis(self.vault, traversal)
+            self.assertFalse(synthesis["success"])
+            self.assertNotIn("outside-vault-secret-marker", json.dumps(synthesis))
+
+            link = self.vault / "wiki" / "escape.md"
+            try:
+                link.symlink_to(secret)
+            except (NotImplementedError, OSError):
+                return
+            linked = read_api.get_synthesis(self.vault, "wiki/escape.md")
+            self.assertFalse(linked["success"])
+            self.assertNotIn("outside-vault-secret-marker", json.dumps(linked))
+
+            outside_observation = outside / "observation.json"
+            outside_observation.write_text(
+                json.dumps(
+                    {
+                        "observation_id": "obs-20260718-outside",
+                        "assertion": "outside-vault-secret-marker",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            observation_link = self.vault / "observations" / "obs-20260718-outside.json"
+            observation_link.symlink_to(outside_observation)
+            escaped_observation = read_api.get_observations(
+                self.vault, observation_id="obs-20260718-outside"
+            )
+            self.assertFalse(escaped_observation["success"])
+            self.assertNotIn("outside-vault-secret-marker", json.dumps(escaped_observation))
+
+    def test_compose_publishes_mcp_on_loopback_only(self) -> None:
+        compose = (REPOSITORY_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn('"127.0.0.1:8000:8000"', compose)
+        self.assertNotIn('      - "8000:8000"', compose)
+
 
 if __name__ == "__main__":
     unittest.main()
