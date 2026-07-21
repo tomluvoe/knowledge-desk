@@ -16,17 +16,12 @@ Obsidian is an **optional** viewer over ordinary Markdown and folders. The vault
 
 ## Durable vs generated
 
-| Path | Role |
-|------|------|
-| `inbox/` | Review-only inputs; not yet truth |
-| `sources/<id>/original/` | Immutable original bytes |
-| `sources/<id>/manifest.json`, `normalized.md` | Canonical source records |
-| `observations/` | Append-only historical claims |
-| `wiki/`, `memory/` | Revisable synthesis and user state |
-| `system/schemas/`, `system/templates/` | Contracts |
-| `system/logs/` | Append-only ops history |
-| `system/update-queue/` | Review-only proposals (not truth) |
-| `system/.staging/`, `system/.index/` | Disposable generated state |
+| Path | In Git? | Role |
+|------|---------|------|
+| `src/`, `docs/`, `system/schemas/`, templates, examples | Yes | Product |
+| `inbox/`, `sources/`, `observations/`, `wiki/`, `memory/`, `domains/` | No (local) | Desk corpus |
+| `system/logs/`, `system/update-queue/` | No (local) | Ops / proposals |
+| `system/.staging/`, `system/.index/`, `system/.locks/` | No | Disposable |
 
 ## Quick start
 
@@ -35,15 +30,22 @@ Obsidian is an **optional** viewer over ordinary Markdown and folders. The vault
 uv python install 3.12
 uv sync --locked
 
+# Create local data directories (gitignored; not in the product repo)
+uv run knowledge-desk init
+
 # Ingest a local file
 uv run knowledge-desk ingest path/to/note.md --title "My note" --language en
 
 # Inspect
 uv run knowledge-desk validate
 ls sources/
+
+# Backup / restore durable data (separate from Git)
+uv run knowledge-desk backup --out backups/desk.tar.gz
+uv run knowledge-desk restore backups/desk.tar.gz --force
 ```
 
-JSON operation results are printed to stdout for scripting.
+JSON operation results are printed to stdout for scripting. **Git tracks product code only.** Each clone is an independent desk; back up corpus data with `backup`, not by committing `sources/` or `wiki/`.
 
 ## Obsidian (optional)
 
@@ -193,10 +195,11 @@ See [architecture](architecture.md) and [artifact model](artifact-model.md).
 
 ## Backup, sync, and migration
 
-- **Backup**: copy/git-bundle the repository (and any LFS/media store). Restoring Git history restores evidence identity.
-- **Sync**: any Git remote works; avoid tools that rewrite original bytes under `sources/*/original/`.
-- **Migration**: schemas are versioned (`schema_version`). Plan additive migrations; never silently rewrite historical observations—append superseding ones instead.
-- After restore: `uv sync --locked`, `knowledge-desk validate`, `knowledge-desk index rebuild`.
+- **Product code**: Git remote / `git pull` (shared among all desks).
+- **Corpus data**: `knowledge-desk backup --out ….tar.gz` and `knowledge-desk restore …` (per desk). Optionally GPG-encrypt archives.
+- **Sync**: do not rely on Git for `sources/` or `wiki/`; those paths are ignored.
+- **Schema migration**: schemas are versioned (`schema_version`). Never silently rewrite historical observations—append superseding ones instead.
+- After cloning a new desk: `uv sync --locked`, `knowledge-desk init`, optionally `restore`, then `validate` / `index rebuild`.
 
 ## Where to read next
 

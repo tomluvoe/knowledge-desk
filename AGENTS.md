@@ -6,15 +6,17 @@ Read [architecture](docs/architecture.md), [artifact model](docs/artifact-model.
 
 ## Path classes
 
-- `inbox/`: review-only input; never treat it as ingested truth.
-- `sources/<source-id>/original/`: canonical and immutable after successful ingestion. Never edit, rename, or replace an original.
-- `sources/<source-id>/manifest.json` and `normalized.md`: canonical source records. Corrections create an explicit revision; they never silently mutate evidence.
-- `observations/`: canonical, append-only historical records. Add a related observation to confirm, refine, contradict, or supersede one.
-- `wiki/` and `memory/`: canonical but revisable synthesis and explicit user-state records. They are not primary evidence.
-- `domains/`: optional domain packs. Core fields stay generic; extensions live only under reverse-DNS-style or otherwise registered namespaced keys.
-- `system/schemas/` and `system/templates/`: canonical, version-controlled contracts.
-- `system/logs/`: append-only operational history. `system/update-queue/`: review-only proposed changes.
-- `system/.staging/`, future indexes, embeddings, graphs, and caches: generated/disposable; never cite them as truth.
+**Product Git repo** tracks code, schemas, templates, examples, and docs only. **Per-desk data** is local (gitignored) and backed up with `knowledge-desk backup` (tar.gz), not committed to the product history. After clone: `uv sync --locked` then `knowledge-desk init`.
+
+- `inbox/`: review-only input; never treat it as ingested truth. **Local data.**
+- `sources/<source-id>/original/`: canonical and immutable after successful ingestion. Never edit, rename, or replace an original. **Local data.**
+- `sources/<source-id>/manifest.json` and `normalized.md`: canonical source records. Corrections create an explicit revision; they never silently mutate evidence. **Local data.**
+- `observations/`: canonical, append-only historical records. Add a related observation to confirm, refine, contradict, or supersede one. **Local data.**
+- `wiki/` and `memory/`: canonical but revisable synthesis and explicit user-state records. They are not primary evidence. **Local data.**
+- `domains/`: optional installed domain packs for this desk instance. Core fields stay generic; extensions live only under reverse-DNS-style or otherwise registered namespaced keys. **Local data.**
+- `system/schemas/` and `system/templates/` and `system/examples/`: version-controlled product contracts (in Git).
+- `system/logs/`: append-only operational history. `system/update-queue/`: review-only proposed changes. **Local data.**
+- `system/.staging/`, `system/.index/`, `system/.locks/`: generated/disposable; never cite them as truth.
 
 ## Epistemic and temporal rules
 
