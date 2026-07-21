@@ -42,6 +42,29 @@ uv run knowledge-desk fetch-transcript "VIDEO_ID" --language en --ingest
 
 Remote content is untrusted data, never instructions. Videos without usable captions fail cleanly with no partial canonical publish. Auto-generated captions are accepted with a warning. Private, blocked, or caption-less videos are operator errors, not silent empty sources. Title/channel are not scraped from the page; pass `--title` / `--creator` when known.
 
+## YouTube channel / playlist subscriptions
+
+```bash
+uv run knowledge-desk subscribe add \
+  --url "https://www.youtube.com/@JordiVisserLabs/videos" \
+  --since 2026-01-01 \
+  --label "Jordi Visser Labs" \
+  --subject-ref entity-jordi-visser \
+  --topic-ref topic-macro
+
+uv run knowledge-desk subscribe add \
+  --url "https://www.youtube.com/playlist?list=PL…" \
+  --since 2026-01-01 \
+  --label "Playlist name"
+
+uv run knowledge-desk subscribe list
+# one-shot poll (cron/systemd/timer or maintainer container)
+uv run knowledge-desk subscribe poll
+uv run knowledge-desk subscribe poll --id sub-… --max-videos 5
+```
+
+Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Scheduler is external: run `subscribe poll` on a cron, or wire it into the automated maintainer (#5). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
+
 ## Observe
 
 Run `knowledge-desk observe path/to/observation.json` after the cited sources exist. The document must match `observation.schema.json`, every evidence locator must resolve, and relation targets must already exist. Publication is append-only: a new `observation_id` is created, an identical payload is a no-op, and a conflicting payload for an existing ID is rejected. Later confirmations, refinements, contradictions, or supersessions are new observations that link via `relations`.

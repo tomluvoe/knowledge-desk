@@ -25,6 +25,7 @@ DATA_DIRECTORIES: tuple[str, ...] = (
     "system/update-queue",
     "system/update-queue/applied",
     "system/update-queue/rejected",
+    "system/subscriptions",
 )
 
 # Paths archived by backup (directory roots relative to vault root).
@@ -37,6 +38,7 @@ BACKUP_ROOTS: tuple[str, ...] = (
     "domains",
     "system/logs",
     "system/update-queue",
+    "system/subscriptions",
 )
 
 README_BLURBS: dict[str, str] = {
@@ -58,6 +60,7 @@ README_BLURBS: dict[str, str] = {
     "system/update-queue": "Review-only proposals. Apply/reject with `knowledge-desk proposal`.",
     "system/update-queue/applied": "Archived applied proposals.",
     "system/update-queue/rejected": "Archived rejected proposals.",
+    "system/subscriptions": "YouTube channel/playlist subscription state and poll cursors.",
 }
 
 
