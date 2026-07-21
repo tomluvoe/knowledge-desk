@@ -11,6 +11,8 @@ from jsonschema.exceptions import SchemaError
 
 from knowledge_desk.util import (
     SCHEMA_VERSION,
+    confined_file,
+    normalization_for_path,
     normalized_content,
     parse_frontmatter,
     sha256_file,
@@ -43,7 +45,6 @@ def schema_errors(instance: object, schema: dict[str, Any]) -> list[str]:
 def validate_source_artifacts(vault_root: Path, artifact_dir: Path) -> list[str]:
     errors: list[str] = []
     manifest_path = artifact_dir / "manifest.json"
-    note_path = artifact_dir / "normalized.md"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -75,31 +76,121 @@ def validate_source_artifacts(vault_root: Path, artifact_dir: Path) -> list[str]
         expected_original_path = f"sources/{source_id}/original/{originals[0].name}"
         if manifest.get("original_path") != expected_original_path:
             errors.append("manifest original_path does not identify the stored original")
-    if manifest.get("normalized_path") != f"sources/{source_id}/normalized.md":
-        errors.append("manifest normalized_path does not identify the stored normalized note")
-
-    try:
-        note_text = note_path.read_text(encoding="utf-8")
-        note_metadata, note_body = parse_frontmatter(note_text)
-        normalized_content(note_body)
-    except FileNotFoundError:
-        errors.append("normalized.md: missing")
-        return errors
-    except (OSError, UnicodeDecodeError, ValueError) as exc:
-        errors.append(f"normalized.md: unreadable or incomplete ({type(exc).__name__})")
-        return errors
-    errors.extend(
-        f"normalized note {message}"
-        for message in schema_errors(note_metadata, load_schema(vault_root, "normalized-source-note.schema.json"))
-    )
-    shared_keys = set(note_metadata)
-    for key in shared_keys:
-        if manifest.get(key) != note_metadata[key]:
-            errors.append(f"normalized note metadata {key!r} differs from manifest")
+    normalization = manifest.get("normalization")
+    revisions = normalization.get("revisions") if isinstance(normalization, dict) else None
+    current_revision_id = normalization.get("current_revision") if isinstance(normalization, dict) else None
+    current_content: str | None = None
+    registered_paths: set[str] = set()
+    revision_ids: set[str] = set()
+    previous_revision_id: str | None = None
+    if isinstance(revisions, list):
+        for revision in revisions:
+            if not isinstance(revision, dict):
+                continue
+            revision_id = revision.get("revision_id")
+            normalized_path = revision.get("normalized_path")
+            normalized_hash = revision.get("normalized_hash")
+            if isinstance(revision_id, str):
+                if revision_id in revision_ids:
+                    errors.append(f"duplicate normalization revision ID {revision_id}")
+                revision_ids.add(revision_id)
+                if revision.get("supersedes") != previous_revision_id:
+                    errors.append(
+                        f"normalization revision {revision_id} does not supersede the prior history entry"
+                    )
+                previous_revision_id = revision_id
+            if not isinstance(normalized_path, str):
+                continue
+            if normalized_path in registered_paths:
+                errors.append(f"duplicate normalization path {normalized_path}")
+            registered_paths.add(normalized_path)
+            prefix = f"sources/{source_id}/"
+            if not normalized_path.startswith(prefix):
+                errors.append(f"normalization revision {revision_id} path is outside its source")
+                continue
+            if "/normalizations/" in normalized_path and normalized_path != (
+                f"{prefix}normalizations/{revision_id}.md"
+            ):
+                errors.append(f"normalization revision {revision_id} path does not match its revision ID")
+            relative_note = normalized_path.removeprefix(prefix)
+            note_path = confined_file(artifact_dir, artifact_dir / relative_note)
+            if note_path is None:
+                errors.append(f"normalization revision {revision_id} note is missing or outside its source")
+                continue
+            if not isinstance(normalized_hash, str) or f"sha256:{sha256_file(note_path)}" != normalized_hash:
+                errors.append(f"normalization revision {revision_id} content hash does not match manifest")
+            try:
+                note_text = note_path.read_text(encoding="utf-8")
+                note_metadata, note_body = parse_frontmatter(note_text)
+                content = normalized_content(note_body)
+            except (OSError, UnicodeDecodeError, ValueError) as exc:
+                errors.append(
+                    f"normalization revision {revision_id} is unreadable or incomplete ({type(exc).__name__})"
+                )
+                continue
+            errors.extend(
+                f"normalization revision {revision_id} {message}"
+                for message in schema_errors(
+                    note_metadata,
+                    load_schema(vault_root, "normalized-source-note.schema.json"),
+                )
+            )
+            for key in (
+                "schema_version",
+                "source_id",
+                "content_hash",
+                "media_type",
+                "title",
+                "creator",
+                "publication_date",
+                "ingested_at",
+                "canonical_url",
+                "language",
+            ):
+                if manifest.get(key) != note_metadata.get(key):
+                    errors.append(f"normalization revision {revision_id} metadata {key!r} differs from manifest")
+            for key in ("extraction_status", "warnings", "page_count"):
+                if revision.get(key) != note_metadata.get(key):
+                    errors.append(f"normalization revision {revision_id} metadata {key!r} differs from history")
+            if revision_id == current_revision_id:
+                current_content = content
+                if manifest.get("normalized_path") != normalized_path:
+                    errors.append("manifest normalized_path does not match the current normalization revision")
+                if manifest.get("normalized_hash") != normalized_hash:
+                    errors.append("manifest normalized_hash does not match the current normalization revision")
+                for key in ("extraction_status", "warnings", "page_count"):
+                    if manifest.get(key) != revision.get(key):
+                        errors.append(f"manifest {key!r} differs from the current normalization revision")
+        if current_revision_id not in revision_ids:
+            errors.append("normalization current_revision does not identify a registered revision")
+        elif revisions and isinstance(revisions[-1], dict) and current_revision_id != revisions[-1].get(
+            "revision_id"
+        ):
+            errors.append("normalization current_revision is not the latest history entry")
+        for revision in revisions:
+            if not isinstance(revision, dict):
+                continue
+            supersedes = revision.get("supersedes")
+            if supersedes is not None and supersedes not in revision_ids:
+                errors.append(
+                    f"normalization revision {revision.get('revision_id')} supersedes unknown revision {supersedes}"
+                )
+    actual_revision_paths = {
+        path.relative_to(artifact_dir).as_posix()
+        for path in artifact_dir.glob("normalizations/*.md")
+        if path.is_file()
+    }
+    expected_revision_paths = {
+        path.removeprefix(f"sources/{source_id}/")
+        for path in registered_paths
+        if "/normalizations/" in path
+    }
+    if actual_revision_paths != expected_revision_paths:
+        errors.append("normalization revision files do not match manifest history")
 
     status = manifest.get("extraction_status")
     media_type = manifest.get("media_type")
-    content = normalized_content(note_body)
+    content = current_content or ""
     if status == "needs_ocr":
         if media_type != "application/pdf":
             errors.append("needs_ocr is only valid for PDF sources")
@@ -425,6 +516,7 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
     ``schema_version`` (the parent artifact owns the schema). Standalone locator
     documents require it. Either form is accepted here.
     """
+    vault_root = vault_root.resolve()
     errors: list[str] = []
     if not isinstance(locator, dict):
         return ["evidence locator root must be an object"]
@@ -450,8 +542,9 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
         return ["evidence target source manifest is not an object"]
     if locator["source_hash"] != manifest.get("content_hash"):
         errors.append("evidence source_hash differs from source manifest")
-    if locator["normalized_path"] != manifest.get("normalized_path"):
-        errors.append("evidence normalized_path differs from source manifest")
+    revision = normalization_for_path(manifest, locator["normalized_path"])
+    if revision is None:
+        errors.append("evidence normalized_path is not a registered normalization revision")
 
     kind = locator["locator_kind"]
     media_type = manifest.get("media_type")
@@ -460,7 +553,11 @@ def validate_locator(vault_root: Path, locator: dict[str, Any]) -> list[str]:
     if kind_errors:
         return errors
 
-    note_path = vault_root / locator["normalized_path"]
+    note_path = confined_file(vault_root / "sources" / source_id, vault_root / locator["normalized_path"])
+    if note_path is None:
+        return errors + ["evidence normalized target is missing or outside its source"]
+    if revision is not None and f"sha256:{sha256_file(note_path)}" != revision.get("normalized_hash"):
+        errors.append("evidence normalized target hash differs from source manifest")
     try:
         _, body = parse_frontmatter(note_path.read_text(encoding="utf-8"))
         content = normalized_content(body)

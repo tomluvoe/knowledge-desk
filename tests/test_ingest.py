@@ -5,7 +5,9 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from knowledge_desk.adapters.base import ExtractionResult
 from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path
 from knowledge_desk.util import parse_frontmatter, sha256_text
 from knowledge_desk.validation import load_schema, schema_errors, validate_locator, validate_vault
@@ -203,6 +205,184 @@ class IngestionTests(unittest.TestCase):
         report = validate_vault(self.vault)
         self.assertFalse(report.valid)
         self.assertTrue(any("content hash" in error for error in report.errors))
+
+    def test_validator_detects_normalized_note_tampering(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Exact sentence.\n", encoding="utf-8")
+        result = ingest_file(self.vault, source, IngestMetadata())
+        source_dir = self.vault / "sources" / str(result.source_id)
+        manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertRegex(manifest["normalized_hash"], r"^sha256:[0-9a-f]{64}$")
+
+        normalized = self.vault / manifest["normalized_path"]
+        normalized.write_text(
+            normalized.read_text(encoding="utf-8").replace("Exact sentence.", "Altered sentence."),
+            encoding="utf-8",
+        )
+
+        report = validate_vault(self.vault)
+        self.assertFalse(report.valid)
+        self.assertTrue(any("normalization revision" in error and "hash" in error for error in report.errors))
+
+    def test_validator_rejects_broken_normalization_history_order(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Exact sentence.\n", encoding="utf-8")
+        first = ingest_file(self.vault, source, IngestMetadata())
+        second = ingest_file(self.vault, source, IngestMetadata(), renormalize=True)
+        manifest_path = self.vault / "sources" / str(first.source_id) / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["normalization"]["revisions"][1]["supersedes"] = None
+        manifest["normalization"]["current_revision"] = manifest["normalization"]["revisions"][0][
+            "revision_id"
+        ]
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+        report = validate_vault(self.vault)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(any("does not supersede the prior history entry" in error for error in report.errors))
+        self.assertTrue(any("current_revision is not the latest" in error for error in report.errors))
+
+    def test_explicit_renormalization_preserves_prior_locator(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Original normalized sentence.\n", encoding="utf-8")
+        first = ingest_file(self.vault, source, IngestMetadata())
+        old_locator = {
+            "schema_version": "1.0.0",
+            "source_id": first.source_id,
+            "source_hash": first.content_hash,
+            "normalized_path": first.normalized_path,
+            "locator_kind": "line_range",
+            "selector": {"start_line": 1, "end_line": 1},
+            "quote_sha256": sha256_text("Original normalized sentence."),
+        }
+        self.assertEqual([], validate_locator(self.vault, old_locator))
+
+        class CorrectedTextAdapter:
+            adapter_id = "knowledge-desk.text"
+            adapter_version = "2"
+
+            @staticmethod
+            def extract(path: Path) -> ExtractionResult:
+                return ExtractionResult(
+                    media_type="text/plain",
+                    markdown_body=(
+                        "# short\n\n<!-- ev-content-start -->\n"
+                        "Corrected normalized sentence.\n"
+                        "<!-- ev-content-end -->\n"
+                    ),
+                    title="short",
+                )
+
+        with patch("knowledge_desk.ingest.adapter_for_suffix", return_value=CorrectedTextAdapter()):
+            revised = ingest_file(self.vault, source, IngestMetadata(), renormalize=True)
+
+        self.assertEqual("normalization_revision", revised.status, revised.message)
+        self.assertNotEqual(first.normalized_path, revised.normalized_path)
+        self.assertTrue((self.vault / str(first.normalized_path)).is_file())
+        self.assertTrue((self.vault / str(revised.normalized_path)).is_file())
+        self.assertEqual([], validate_locator(self.vault, old_locator))
+        new_locator = old_locator | {
+            "normalized_path": revised.normalized_path,
+            "selector": {"start_line": 1, "end_line": 1},
+            "quote_sha256": sha256_text("Corrected normalized sentence."),
+        }
+        self.assertEqual([], validate_locator(self.vault, new_locator))
+        manifest = json.loads(
+            (self.vault / "sources" / str(first.source_id) / "manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(2, len(manifest["normalization"]["revisions"]))
+        self.assertEqual(
+            manifest["normalization"]["revisions"][0]["revision_id"],
+            manifest["normalization"]["revisions"][1]["supersedes"],
+        )
+        self.assertTrue(validate_vault(self.vault).valid)
+
+    def test_renormalize_unchanged_output_is_auditable_revision(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Exact sentence.\n", encoding="utf-8")
+        first = ingest_file(self.vault, source, IngestMetadata())
+        second = ingest_file(self.vault, source, IngestMetadata(), renormalize=True)
+        self.assertEqual("normalization_revision", second.status, second.message)
+        self.assertNotEqual(first.normalized_path, second.normalized_path)
+        self.assertEqual(
+            (self.vault / str(first.normalized_path)).read_bytes(),
+            (self.vault / str(second.normalized_path)).read_bytes(),
+        )
+        manifest = json.loads(
+            (self.vault / "sources" / str(first.source_id) / "manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(2, len(manifest["normalization"]["revisions"]))
+
+    def test_failed_renormalization_manifest_swap_removes_unpublished_note(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Original normalized sentence.\n", encoding="utf-8")
+        first = ingest_file(self.vault, source, IngestMetadata())
+        source_dir = self.vault / "sources" / str(first.source_id)
+        manifest_path = source_dir / "manifest.json"
+        original_manifest = manifest_path.read_bytes()
+
+        class CorrectedTextAdapter:
+            adapter_id = "knowledge-desk.text"
+            adapter_version = "2"
+
+            @staticmethod
+            def extract(path: Path) -> ExtractionResult:
+                return ExtractionResult(
+                    media_type="text/plain",
+                    markdown_body=(
+                        "# short\n\n<!-- ev-content-start -->\n"
+                        "Corrected normalized sentence.\n"
+                        "<!-- ev-content-end -->\n"
+                    ),
+                    title="short",
+                )
+
+        with (
+            patch("knowledge_desk.ingest.adapter_for_suffix", return_value=CorrectedTextAdapter()),
+            patch("knowledge_desk.ingest._replace_json_synced", side_effect=OSError("simulated swap failure")),
+        ):
+            revised = ingest_file(self.vault, source, IngestMetadata(), renormalize=True)
+
+        self.assertEqual("failed", revised.status)
+        self.assertEqual(original_manifest, manifest_path.read_bytes())
+        revisions_dir = source_dir / "normalizations"
+        self.assertFalse(revisions_dir.exists() and any(revisions_dir.iterdir()))
+        self.assertTrue(validate_vault(self.vault).valid)
+
+    def test_duplicate_ingest_rejects_original_path_outside_source(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Exact sentence.\n", encoding="utf-8")
+        first = ingest_file(self.vault, source, IngestMetadata())
+        manifest_path = self.vault / "sources" / str(first.source_id) / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        external = self.vault / "outside.txt"
+        external.write_bytes(source.read_bytes())
+        manifest["original_path"] = "outside.txt"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+        duplicate = ingest_file(self.vault, source, IngestMetadata())
+
+        self.assertEqual("failed", duplicate.status)
+        self.assertIn("invalid original_path", duplicate.message)
+
+    def test_renormalize_upgrades_legacy_manifest_integrity_metadata(self) -> None:
+        source = self.vault / "short.txt"
+        source.write_text("Exact sentence.\n", encoding="utf-8")
+        first = ingest_file(self.vault, source, IngestMetadata())
+        manifest_path = self.vault / "sources" / str(first.source_id) / "manifest.json"
+        legacy = json.loads(manifest_path.read_text(encoding="utf-8"))
+        legacy.pop("normalized_hash")
+        legacy.pop("normalization")
+        manifest_path.write_text(json.dumps(legacy, indent=2) + "\n", encoding="utf-8")
+
+        upgraded = ingest_file(self.vault, source, IngestMetadata(), renormalize=True)
+
+        self.assertEqual("normalization_revision", upgraded.status, upgraded.message)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertRegex(manifest["normalized_hash"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual("knowledge-desk.legacy", manifest["normalization"]["revisions"][0]["adapter"])
+        self.assertTrue(validate_vault(self.vault).valid)
 
 
 class RepositoryContractTests(unittest.TestCase):

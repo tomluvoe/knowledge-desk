@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from knowledge_desk.observations import load_all_observations
-from knowledge_desk.util import confined_file, normalized_content, parse_frontmatter
+from knowledge_desk.util import (
+    confined_file,
+    normalization_for_path,
+    normalized_content,
+    parse_frontmatter,
+    sha256_file,
+)
 
 
 INDEX_RELATIVE_PATH = "system/.index/vault.sqlite"
@@ -270,12 +276,24 @@ def _index_sources(connection: sqlite3.Connection, vault_root: Path) -> int:
         source_id = str(manifest.get("source_id") or manifest_path.parent.name)
         if not re.fullmatch(r"src-[0-9a-f]{24}", source_id):
             continue
-        expected_normalized = f"sources/{source_id}/normalized.md"
-        if manifest_path.parent.name != source_id or manifest.get("normalized_path") != expected_normalized:
+        normalized_path = manifest.get("normalized_path")
+        revision = (
+            normalization_for_path(manifest, normalized_path)
+            if isinstance(normalized_path, str)
+            else None
+        )
+        normalization = manifest.get("normalization")
+        current_revision = normalization.get("current_revision") if isinstance(normalization, dict) else None
+        if (
+            manifest_path.parent.name != source_id
+            or revision is None
+            or revision.get("revision_id") != current_revision
+            or revision.get("normalized_hash") != manifest.get("normalized_hash")
+        ):
             continue
-        note_path = confined_file(manifest_path.parent, vault_root / expected_normalized)
+        note_path = confined_file(manifest_path.parent, vault_root / normalized_path)
         body = ""
-        if note_path is not None:
+        if note_path is not None and f"sha256:{sha256_file(note_path)}" == revision.get("normalized_hash"):
             try:
                 _, note_body = parse_frontmatter(note_path.read_text(encoding="utf-8"))
                 body = normalized_content(note_body)

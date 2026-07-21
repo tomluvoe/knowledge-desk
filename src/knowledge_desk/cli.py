@@ -86,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--published", dest="publication_date")
     ingest.add_argument("--url", dest="canonical_url")
     ingest.add_argument("--language")
+    ingest.add_argument(
+        "--renormalize",
+        action="store_true",
+        help="explicitly create a normalization revision when adapter output changed",
+    )
 
     observe = subparsers.add_parser(
         "observe",
@@ -493,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
             canonical_url=args.canonical_url,
             language=args.language,
         )
-        results = ingest_path(vault_root, args.path, metadata)
+        results = ingest_path(vault_root, args.path, metadata, renormalize=args.renormalize)
         payload = {
             "operation": "ingest",
             "success": ingest_successful(results),
