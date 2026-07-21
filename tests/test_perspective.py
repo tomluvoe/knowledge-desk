@@ -11,6 +11,7 @@ from pathlib import Path
 from knowledge_desk.cli import main
 from knowledge_desk.ingest import IngestMetadata, ingest_file
 from knowledge_desk.observe import append_observation
+from knowledge_desk.observations import ObservationQuery, list_observations
 from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
 
 
@@ -241,6 +242,134 @@ class PerspectiveTests(unittest.TestCase):
         )
         self.assertEqual(1, len(clipped.events))
         self.assertEqual("obs-20240601-alpha-two", clipped.events[0]["observation_id"])
+
+    def test_date_only_bounds_include_entire_day_and_exclude_next_midnight(self) -> None:
+        observations = [
+            self._obs(
+                "obs-20231231-before",
+                "Before range",
+                valid_at="2023-12-31T23:59:59.999999Z",
+                line=1,
+            ),
+            self._obs(
+                "obs-20240101-early",
+                "Early fractional",
+                valid_at="2024-01-01T00:00:00.000001Z",
+                line=1,
+            ),
+            self._obs(
+                "obs-20240101-late",
+                "Final fractional second",
+                valid_at="2024-01-01T23:59:59.500Z",
+                line=2,
+            ),
+            self._obs(
+                "obs-20240102-next",
+                "Next midnight",
+                valid_at="2024-01-02T00:00:00Z",
+                line=2,
+            ),
+        ]
+        for observation in observations:
+            result = append_observation(self.vault, observation)
+            self.assertEqual("created", result.status, result.message)
+
+        at = perspective_at(self.vault, self.subject, self.topic, "2024-01-01")
+        self.assertEqual("supported", at.status)
+        self.assertEqual("obs-20240101-late", at.observation_id)
+
+        timeline = perspective_timeline(
+            self.vault,
+            self.subject,
+            self.topic,
+            start="2024-01-01",
+            end="2024-01-01",
+        )
+        self.assertEqual(
+            ["obs-20240101-early", "obs-20240101-late"],
+            [event["observation_id"] for event in timeline.events],
+        )
+
+    def test_observation_order_normalizes_offsets_and_breaks_instant_ties_by_id(self) -> None:
+        observations = [
+            self._obs(
+                "obs-20240101-offset-a",
+                "Eight UTC",
+                valid_at="2024-01-01T10:00:00+02:00",
+                line=1,
+            ),
+            self._obs(
+                "obs-20240101-offset-b",
+                "Eight thirty UTC",
+                valid_at="2024-01-01T08:30:00Z",
+                line=2,
+            ),
+            self._obs(
+                "obs-20240101-offset-c",
+                "Equivalent eight thirty UTC",
+                valid_at="2024-01-01T09:30:00+01:00",
+                line=3,
+            ),
+        ]
+        for observation in observations:
+            result = append_observation(self.vault, observation)
+            self.assertEqual("created", result.status, result.message)
+
+        records = list_observations(
+            self.vault,
+            ObservationQuery(subject=self.subject, topic=self.topic),
+        )
+        self.assertEqual(
+            [
+                "obs-20240101-offset-a",
+                "obs-20240101-offset-b",
+                "obs-20240101-offset-c",
+            ],
+            [record.observation["observation_id"] for record in records],
+        )
+
+    def test_timeline_preserves_every_material_relation(self) -> None:
+        first = self._obs(
+            "obs-20240101-relation-first",
+            "First relation target",
+            valid_at="2024-01-01T00:00:00Z",
+            line=1,
+        )
+        second = self._obs(
+            "obs-20240102-relation-second",
+            "Second relation target",
+            valid_at="2024-01-02T00:00:00Z",
+            line=2,
+        )
+        combined = self._obs(
+            "obs-20240103-relation-combined",
+            "Supports and refines distinct prior records",
+            valid_at="2024-01-03T00:00:00Z",
+            relations=[
+                {"type": "confirms", "observation_id": first["observation_id"]},
+                {"type": "refines", "observation_id": second["observation_id"]},
+            ],
+            line=3,
+        )
+        for observation in (first, second, combined):
+            result = append_observation(self.vault, observation)
+            self.assertEqual("created", result.status, result.message)
+
+        timeline = perspective_timeline(self.vault, self.subject, self.topic)
+        event = next(
+            item
+            for item in timeline.events
+            if item["observation_id"] == combined["observation_id"]
+        )
+        self.assertEqual("confirms", event["change"])
+        self.assertEqual(first["observation_id"], event["related_observation_id"])
+        self.assertEqual(
+            [
+                {"type": "confirms", "observation_id": first["observation_id"]},
+                {"type": "refines", "observation_id": second["observation_id"]},
+            ],
+            event["relations"],
+        )
 
     def test_compare_subjects_dimensional(self) -> None:
         other = "entity-beta"

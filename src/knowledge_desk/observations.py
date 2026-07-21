@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.observe import load_observation_document, observation_path
-from knowledge_desk.util import confined_file
+from knowledge_desk.util import confined_file, parse_utc_datetime
 
 
 OBSERVATION_ID_PATTERN = re.compile(r"^obs-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -169,10 +170,20 @@ def _has_source(observation: dict[str, Any], source_id: str) -> bool:
     return False
 
 
-def _sort_key(observation: dict[str, Any]) -> tuple[str, str]:
-    valid_at = observation.get("valid_at") or observation.get("expressed_at") or observation.get("recorded_at") or ""
+def _sort_key(observation: dict[str, Any]) -> tuple[datetime, str]:
+    value = (
+        observation.get("valid_at")
+        or observation.get("expressed_at")
+        or observation.get("publication_date")
+        or observation.get("recorded_at")
+        or ""
+    )
+    try:
+        when = parse_utc_datetime(str(value))
+    except ValueError:
+        when = datetime.min.replace(tzinfo=timezone.utc)
     observation_id = observation.get("observation_id") or ""
-    return (str(valid_at), str(observation_id))
+    return (when, str(observation_id))
 
 
 def parse_observation_query(args: Any) -> ObservationQuery:
