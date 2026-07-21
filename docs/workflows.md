@@ -302,6 +302,17 @@ uv run knowledge-desk search frog --subject entity-example-wetland
 
 Hits identify `layer` (`source`, `observation`, `wiki`, `memory`) and stable vault ids/paths. Deleting the database loses no durable knowledge; run `index rebuild` after checkout or bulk imports. External MCP/private context is never indexed unless explicitly imported into the vault.
 
+Structured filters use exact relational facets, not substring matching. Each hit exposes `subtype`, `subjects`, `topics`, `source_ids`, and `observation_ids` according to its canonical layer:
+
+| Layer | Subtype | Structured associations |
+|---|---|---|
+| source | manifest `media_type` | source ID plus subjects, topics, and observations that cite the source |
+| observation | `statement_basis` | direct subject/topic refs, cited sources, its own ID, and relation targets |
+| wiki | wiki `kind` | entity/topic identity plus linked observations and their subject/topic/source associations |
+| memory | memory `kind` or workspace `page_kind` | workspace subject/topic refs plus linked observations and evidence sources |
+
+Rebuild constructs and integrity-checks a complete database under disposable staging, then atomically replaces the live SQLite file. Readers therefore retain the prior complete index until the new one is ready.
+
 ## Validate, lint, and review
 
 ```bash
