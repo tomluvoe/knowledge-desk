@@ -68,7 +68,7 @@ def replace_text_synced(path: Path, value: str) -> None:
         mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
         staged.chmod(mode)
         os.replace(staged, path)
-        _fsync_directory(path.parent)
+        fsync_directory(path.parent)
     finally:
         if staged.exists():
             staged.unlink()
@@ -78,7 +78,7 @@ def replace_json_synced(path: Path, value: Any) -> None:
     replace_text_synced(path, json_text(value))
 
 
-def _fsync_directory(path: Path) -> None:
+def fsync_directory(path: Path) -> None:
     try:
         descriptor = os.open(path, os.O_RDONLY)
     except OSError:
