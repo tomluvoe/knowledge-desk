@@ -7,7 +7,7 @@ from pathlib import Path
 
 from knowledge_desk.backup import backup_vault, restore_vault
 from knowledge_desk.errors import KnowledgeDeskError
-from knowledge_desk.explore import explore_ask, explore_gaps
+from knowledge_desk.explore import compile_from_ask, explore_ask, explore_gaps
 from knowledge_desk.index import rebuild_index, search_index
 from knowledge_desk.ingest import IngestMetadata, ingest_path, successful as ingest_successful
 from knowledge_desk.layout import init_vault
@@ -298,6 +298,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--propose",
         action="store_true",
         help="write observation stub or open-question proposal to system/update-queue/",
+    )
+    explore_compile = explore_sub.add_parser(
+        "compile-from-ask",
+        help="evidence ask + thin/missing wiki → review-only compile proposal (not MCP auto-write)",
+    )
+    explore_compile.add_argument("question", help="natural-language question")
+    explore_compile.add_argument("--limit", type=int, default=5)
+    explore_compile.add_argument("--subject", help="subject ref_id or label for scope and wiki health")
+    explore_compile.add_argument("--topic", help="topic ref_id or label for scope and wiki health")
+    explore_compile.add_argument("--source-id", dest="source_id")
+    explore_compile.add_argument(
+        "--no-propose",
+        action="store_true",
+        help="classify only; do not write update-queue proposal",
     )
 
     mcp = subparsers.add_parser("mcp", help="read-only MCP server (stdio or network transport)")
@@ -872,6 +886,18 @@ def _explore_command(vault_root: Path, args: argparse.Namespace) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status == "answered" else 2
+    if args.explore_command == "compile-from-ask":
+        result = compile_from_ask(
+            vault_root,
+            args.question,
+            limit=args.limit,
+            subject=args.subject,
+            topic=args.topic,
+            source_id=args.source_id,
+            propose=not args.no_propose,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status in {"proposed", "noop"} else 2
     return 2
 
 
