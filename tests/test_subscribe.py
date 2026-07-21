@@ -5,18 +5,23 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import knowledge_desk.subscribe as subscribe_module
 from knowledge_desk.subscribe import (
     Subscription,
     VideoItem,
     add_subscription,
     list_subscriptions,
+    load_subscription,
     parse_youtube_atom_feed,
     poll_subscriptions,
     resolve_youtube_feed_target,
 )
 from knowledge_desk.youtube_transcript import TranscriptPayload, TranscriptSnippet
 from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.validation import validate_vault
+from knowledge_desk.writer import vault_write_lock_held
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -111,12 +116,22 @@ class SubscribeTests(unittest.TestCase):
         listed = list_subscriptions(self.vault)
         self.assertEqual(1, listed["count"])
 
-        polled = poll_subscriptions(
-            self.vault,
-            max_videos=5,
-            discoverer=discoverer,
-            transcript_fetcher=FakeFetcher(),
-        )
+        write_briefing = subscribe_module._write_delta_briefing
+
+        def guarded_briefing(*args, **kwargs):
+            self.assertTrue(vault_write_lock_held(self.vault))
+            return write_briefing(*args, **kwargs)
+
+        with patch(
+            "knowledge_desk.subscribe._write_delta_briefing",
+            side_effect=guarded_briefing,
+        ):
+            polled = poll_subscriptions(
+                self.vault,
+                max_videos=5,
+                discoverer=discoverer,
+                transcript_fetcher=FakeFetcher(),
+            )
         self.assertEqual("ok", polled["status"])
         result = polled["results"][0]
         # aaaaaaaaaaa is before since → skipped; two videos on/after 2026-01-01
@@ -135,6 +150,8 @@ class SubscribeTests(unittest.TestCase):
         text = briefings[0].read_text(encoding="utf-8")
         self.assertIn("Delta vs prior corpus", text)
         self.assertIn("entity-test-speaker", text)
+        report = validate_vault(self.vault)
+        self.assertTrue(report.valid, "\n".join(report.errors))
 
         # Second poll is a no-op integrate
         polled2 = poll_subscriptions(
@@ -144,6 +161,70 @@ class SubscribeTests(unittest.TestCase):
             transcript_fetcher=FakeFetcher(),
         )
         self.assertEqual(0, len(polled2["results"][0]["integrated"]))
+
+    def test_cursor_failure_retries_idempotently_after_source_and_briefing_publish(self) -> None:
+        video = VideoItem(
+            video_id="ddddddddddd",
+            title="Retryable video",
+            published="2026-06-02T12:00:00+00:00",
+            url="https://www.youtube.com/watch?v=ddddddddddd",
+        )
+        discoverer = FakeDiscoverer([video])
+        added = add_subscription(
+            self.vault,
+            "https://www.youtube.com/playlist?list=PLtestdata123",
+            since="2026-01-01",
+            label="Retry playlist",
+            discoverer=discoverer,
+        )
+        subscription_id = added["subscription"]["subscription_id"]
+        save = subscribe_module._save_subscription_unlocked
+        failed_once = False
+
+        def fail_first_cursor(root, subscription):
+            nonlocal failed_once
+            if video.video_id in subscription.processed_video_ids and not failed_once:
+                failed_once = True
+                raise OSError("simulated cursor failure")
+            return save(root, subscription)
+
+        with patch(
+            "knowledge_desk.subscribe._save_subscription_unlocked",
+            side_effect=fail_first_cursor,
+        ):
+            first = poll_subscriptions(
+                self.vault,
+                subscription_id=subscription_id,
+                discoverer=discoverer,
+                transcript_fetcher=FakeFetcher(),
+            )
+
+        first_result = first["results"][0]
+        self.assertEqual([], first_result["integrated"])
+        self.assertEqual(1, len(first_result["errors"]))
+        self.assertNotIn(
+            video.video_id,
+            load_subscription(self.vault, str(subscription_id)).processed_video_ids,
+        )
+        self.assertEqual(1, len(list((self.vault / "sources").glob("src-*"))))
+        self.assertEqual(1, len(list((self.vault / "wiki" / "syntheses").glob("*.md"))))
+
+        second = poll_subscriptions(
+            self.vault,
+            subscription_id=subscription_id,
+            discoverer=discoverer,
+            transcript_fetcher=FakeFetcher(),
+        )
+
+        second_result = second["results"][0]
+        self.assertEqual(1, len(second_result["integrated"]))
+        self.assertEqual([], second_result["errors"])
+        self.assertIn(
+            video.video_id,
+            load_subscription(self.vault, str(subscription_id)).processed_video_ids,
+        )
+        self.assertEqual(1, len(list((self.vault / "sources").glob("src-*"))))
+        self.assertEqual(1, len(list((self.vault / "wiki" / "syntheses").glob("*.md"))))
 
     def test_resolve_channel_handle(self) -> None:
         kind, channel_id = resolve_youtube_feed_target(

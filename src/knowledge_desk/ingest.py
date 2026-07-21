@@ -17,6 +17,8 @@ from knowledge_desk.util import (
     confined_file,
     normalized_content,
     parse_frontmatter,
+    replace_json_synced as atomic_replace_json_synced,
+    replace_text_synced as atomic_replace_text_synced,
     render_frontmatter,
     safe_filename,
     sha256_file,
@@ -502,20 +504,11 @@ def _validate_normalization_update(
 
 
 def _replace_text_synced(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    os.close(descriptor)
-    staged = Path(temporary_name)
-    try:
-        write_text_synced(staged, value)
-        os.replace(staged, path)
-    finally:
-        if staged.exists():
-            staged.unlink()
+    atomic_replace_text_synced(path, value)
 
 
 def _replace_json_synced(path: Path, value: object) -> None:
-    _replace_text_synced(path, json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    atomic_replace_json_synced(path, value)
 
 
 def _append_normalization_log(

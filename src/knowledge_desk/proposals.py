@@ -10,7 +10,14 @@ from typing import Any
 
 from knowledge_desk.errors import KnowledgeDeskError, ValidationError
 from knowledge_desk.observe import _append_observation_unlocked
-from knowledge_desk.util import json_text, render_frontmatter, safe_filename, utc_now, write_text_synced
+from knowledge_desk.util import (
+    json_text,
+    render_frontmatter,
+    replace_text_synced,
+    safe_filename,
+    utc_now,
+    write_text_synced,
+)
 from knowledge_desk.writer import vault_write_lock
 
 
@@ -322,5 +329,5 @@ def _write_memory_record(vault_root: Path, record: dict[str, Any]) -> dict[str, 
     if path.exists():
         return {"status": "noop", "path": path.relative_to(vault_root).as_posix()}
     body = render_frontmatter(record) + f"\n# {record.get('title') or memory_id}\n\n{record.get('statement') or ''}\n"
-    write_text_synced(path, body)
+    replace_text_synced(path, body)
     return {"status": "created", "path": path.relative_to(vault_root).as_posix()}

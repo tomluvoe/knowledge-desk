@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from knowledge_desk.observations import ObservationQuery, list_observations, load_all_observations
-from knowledge_desk.util import SCHEMA_VERSION, parse_frontmatter, render_frontmatter, utc_now, write_text_synced
+from knowledge_desk.util import (
+    SCHEMA_VERSION,
+    parse_frontmatter,
+    render_frontmatter,
+    replace_text_synced,
+    utc_now,
+)
 from knowledge_desk.validation import validate_vault
 
 
@@ -369,7 +375,7 @@ def _write_wiki_page(
             observation_ids=observation_ids,
             message="page already current",
         )
-    write_text_synced(path, document)
+    replace_text_synced(path, document)
     return WikiPageChange(
         status=status,
         path=relative,
