@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://evidence-vault.local/schemas/source-manifest/1.0.0",
-  "title": "Evidence Vault source manifest",
+  "$id": "https://knowledge-desk.local/schemas/source-manifest/1.0.0",
+  "title": "Knowledge Desk source manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "source_id", "media_type", "content_hash", "original_filename", "original_path", "normalized_path", "title", "creator", "publication_date", "ingested_at", "canonical_url", "language", "extraction_status", "warnings", "extensions"],

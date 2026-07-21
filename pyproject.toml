@@ -3,13 +3,13 @@ requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "evidence-vault"
+name = "knowledge-desk"
 version = "0.1.0"
-description = "A local-first, model-independent evidence repository"
+description = "A local-first knowledge desk for collecting, sorting, and discussing a cited corpus"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-authors = [{ name = "Evidence Vault contributors" }]
+authors = [{ name = "Knowledge Desk contributors" }]
 dependencies = [
   "jsonschema>=4.23,<5",
   "mcp>=1.0,<2",
@@ -21,7 +21,7 @@ dependencies = [
 dev = []
 
 [project.scripts]
-evidence-vault = "evidence_vault.cli:main"
+knowledge-desk = "knowledge_desk.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

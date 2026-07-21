@@ -5,10 +5,10 @@
 services:
   mcp:
     build: .
-    image: evidence-vault-mcp:local
+    image: knowledge-desk-mcp:local
     environment:
-      EVIDENCE_VAULT_ROOT: /vault
-      EVIDENCE_VAULT_INDEX_PATH: /tmp/evidence-vault-index.sqlite
+      KNOWLEDGE_DESK_ROOT: /vault
+      KNOWLEDGE_DESK_INDEX_PATH: /tmp/knowledge-desk-index.sqlite
     volumes:
       - type: bind
         source: .
@@ -22,7 +22,7 @@ services:
         "run",
         "--offline",
         "--no-sync",
-        "evidence-vault",
+        "knowledge-desk",
         "--vault",
         "/vault",
         "mcp",

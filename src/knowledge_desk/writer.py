@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from evidence_vault.errors import EvidenceVaultError
+from knowledge_desk.errors import KnowledgeDeskError
 
 LOCK_RELATIVE = "system/.locks/writer.lock"
 
@@ -30,7 +30,7 @@ def vault_write_lock(vault_root: Path, *, timeout_seconds: float = 30.0) -> Iter
                 break
             except BlockingIOError as exc:
                 if time.monotonic() >= deadline:
-                    raise EvidenceVaultError(
+                    raise KnowledgeDeskError(
                         f"timed out waiting for vault write lock at {LOCK_RELATIVE}"
                     ) from exc
                 time.sleep(0.05)

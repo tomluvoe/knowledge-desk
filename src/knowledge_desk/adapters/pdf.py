@@ -5,9 +5,9 @@ from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
-from evidence_vault.adapters.base import ExtractionResult
-from evidence_vault.errors import ExtractionError
-from evidence_vault.util import CONTENT_END, CONTENT_START
+from knowledge_desk.adapters.base import ExtractionResult
+from knowledge_desk.errors import ExtractionError
+from knowledge_desk.util import CONTENT_END, CONTENT_START
 
 
 class PdfAdapter:

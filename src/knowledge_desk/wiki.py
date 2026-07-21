@@ -6,9 +6,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.observations import ObservationQuery, list_observations, load_all_observations
-from evidence_vault.util import SCHEMA_VERSION, parse_frontmatter, render_frontmatter, utc_now, write_text_synced
-from evidence_vault.validation import validate_vault
+from knowledge_desk.observations import ObservationQuery, list_observations, load_all_observations
+from knowledge_desk.util import SCHEMA_VERSION, parse_frontmatter, render_frontmatter, utc_now, write_text_synced
+from knowledge_desk.validation import validate_vault
 
 
 KIND_DIRS = {
@@ -82,7 +82,7 @@ def evolve_wiki(
 
     LLM-assisted prose is out of scope: pages cite observations and restate assertions.
     """
-    from evidence_vault.writer import vault_write_lock
+    from knowledge_desk.writer import vault_write_lock
 
     with vault_write_lock(vault_root):
         return _evolve_wiki_unlocked(
@@ -396,7 +396,7 @@ def _render_body(title: str, observations: list[dict[str, Any]]) -> str:
         "",
         "## What the evidence says",
         "",
-        "Mechanical synthesis from linked observations (`evidence-vault wiki evolve`). "
+        "Mechanical synthesis from linked observations (`knowledge-desk wiki evolve`). "
         "This page is revisable synthesis, not primary evidence.",
         "",
         "### Observations",
@@ -430,7 +430,7 @@ def _render_body(title: str, observations: list[dict[str, Any]]) -> str:
             "## Cross-source synthesis",
             "",
             "No LLM synthesis applied. Compare observation orientations and relations manually or via "
-            "`evidence-vault perspective`.",
+            "`knowledge-desk perspective`.",
             "",
             "## Hypotheses and uncertainty",
             "",

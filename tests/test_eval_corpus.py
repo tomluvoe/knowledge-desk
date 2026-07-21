@@ -5,14 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evidence_vault.explore import explore_ask
-from evidence_vault.index import rebuild_index, search_index
-from evidence_vault.ingest import IngestMetadata, ingest_file
-from evidence_vault.lint import lint_vault
-from evidence_vault.observe import append_observation
-from evidence_vault.perspective import perspective_at
-from evidence_vault.validation import validate_locator, validate_vault
-from evidence_vault.wiki import evolve_wiki
+from knowledge_desk.explore import explore_ask
+from knowledge_desk.index import rebuild_index, search_index
+from knowledge_desk.ingest import IngestMetadata, ingest_file
+from knowledge_desk.lint import lint_vault
+from knowledge_desk.observe import append_observation
+from knowledge_desk.perspective import perspective_at
+from knowledge_desk.validation import validate_locator, validate_vault
+from knowledge_desk.wiki import evolve_wiki
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

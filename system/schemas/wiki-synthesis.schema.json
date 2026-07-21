@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://evidence-vault.local/schemas/wiki-synthesis/1.0.0",
+  "$id": "https://knowledge-desk.local/schemas/wiki-synthesis/1.0.0",
   "title": "Wiki synthesis metadata",
   "type": "object",
   "additionalProperties": false,

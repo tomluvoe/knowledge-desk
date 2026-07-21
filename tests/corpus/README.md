@@ -7,7 +7,7 @@ Deterministic regression scenarios for ingestion fidelity, citations, temporal r
 | Gate | Threshold |
 |------|-----------|
 | Unit + integration suite | 100% pass offline |
-| `evidence-vault validate` on empty/bootstrap vault | valid |
+| `knowledge-desk validate` on empty/bootstrap vault | valid |
 | Citation round-trip (locator → normalized text) | required for corpus fixtures |
 | Unknown vs neutral | missing evidence must yield `unknown` / `insufficient_evidence`, never synthetic neutral orientation |
 | Explicit vs inferred | `statement_basis` preserved; inference without rationale is a lint warning |

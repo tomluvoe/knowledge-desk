@@ -6,9 +6,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.index import index_path, search_index
-from evidence_vault.observations import load_all_observations
-from evidence_vault.util import normalized_content, parse_frontmatter, safe_filename, utc_now, write_json_synced, write_text_synced
+from knowledge_desk.index import index_path, search_index
+from knowledge_desk.observations import load_all_observations
+from knowledge_desk.util import normalized_content, parse_frontmatter, safe_filename, utc_now, write_json_synced, write_text_synced
 
 
 @dataclass
@@ -446,7 +446,7 @@ def _write_gaps_proposal(vault_root: Path, gaps: list[GapEntry]) -> str:
         "gaps": [gap.to_dict() for gap in gaps],
         "suggested_actions": [
             "Append observations for sources missing observation coverage",
-            "Run `evidence-vault wiki evolve` after observations exist",
+            "Run `knowledge-desk wiki evolve` after observations exist",
             "Do not treat this file as canonical truth until reviewed",
         ],
     }
@@ -567,7 +567,7 @@ def _write_observation_stub_proposal(
             "relations": [],
             "extensions": {},
         },
-        "note": "Review-only proposal. Run evidence-vault observe only after editing subjects/topics/assertion.",
+        "note": "Review-only proposal. Run knowledge-desk observe only after editing subjects/topics/assertion.",
     }
     write_json_synced(path, payload)
     return path.relative_to(vault_root).as_posix()

@@ -5,8 +5,8 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.errors import EvidenceVaultError
-from evidence_vault.observations import ObservationQuery, list_observations
+from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.observations import ObservationQuery, list_observations
 
 
 @dataclass
@@ -67,18 +67,18 @@ def parse_as_of(value: str) -> datetime:
     """Parse a date (YYYY-MM-DD) or RFC3339/ISO datetime into an aware UTC datetime."""
     text = value.strip()
     if not text:
-        raise EvidenceVaultError("as_of must be a non-empty date or datetime")
+        raise KnowledgeDeskError("as_of must be a non-empty date or datetime")
     if len(text) == 10 and text[4] == "-" and text[7] == "-":
         try:
             day = date.fromisoformat(text)
         except ValueError as exc:
-            raise EvidenceVaultError(f"invalid as_of date: {value}") from exc
+            raise KnowledgeDeskError(f"invalid as_of date: {value}") from exc
         return datetime.combine(day, time(23, 59, 59), tzinfo=timezone.utc)
     normalized = text.replace("Z", "+00:00")
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
-        raise EvidenceVaultError(f"invalid as_of datetime: {value}") from exc
+        raise KnowledgeDeskError(f"invalid as_of datetime: {value}") from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
@@ -95,7 +95,7 @@ def effective_time(observation: dict[str, Any]) -> datetime | None:
                 day = date.fromisoformat(value)
                 return datetime.combine(day, time.min, tzinfo=timezone.utc)
             return parse_as_of(str(value))
-        except (EvidenceVaultError, ValueError):
+        except (KnowledgeDeskError, ValueError):
             continue
     return None
 
@@ -376,10 +376,10 @@ def compare_perspectives(
     Missing evidence is listed under ``insufficient`` — never filled with neutral.
     """
     if len(subjects) < 2:
-        raise EvidenceVaultError("compare requires at least two --subject values")
+        raise KnowledgeDeskError("compare requires at least two --subject values")
     topic_list = topics or [topic]
     if not topic_list or not all(topic_list):
-        raise EvidenceVaultError("compare requires a topic")
+        raise KnowledgeDeskError("compare requires a topic")
 
     if isinstance(as_of, datetime):
         as_of_dt = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)

@@ -8,7 +8,7 @@ The example domain-pack manifest demonstrates namespace mechanics but is not ins
 
 The bootstrap is one coherent package spanning the repository contract, artifact schemas/layout, ingestion, and the shared validation foundation. Its pull request links issues #4, #14, and #16.
 
-Observation append (`evidence-vault observe`) validates schema and resolvable evidence before publishing under `observations/<observation_id>.json`. Query helpers (`observations list|get|relations`) and temporal `perspective at|timeline` advance #11 and #10.
+Observation append (`knowledge-desk observe`) validates schema and resolvable evidence before publishing under `observations/<observation_id>.json`. Query helpers (`observations list|get|relations`) and temporal `perspective at|timeline` advance #11 and #10.
 
 YouTube transcript fetch (`fetch-transcript`) uses the uv-locked `youtube-transcript-api` package behind an injectable fetcher boundary so unit tests never require network. The downloaded Markdown is ordinary text for the existing ingest adapters; the transcript file is the immutable original (not the video stream).
 

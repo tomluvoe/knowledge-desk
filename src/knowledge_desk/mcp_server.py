@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from evidence_vault import read_api
-from evidence_vault.errors import EvidenceVaultError
+from knowledge_desk import read_api
+from knowledge_desk.errors import KnowledgeDeskError
 
 
 def create_mcp_server(
@@ -24,14 +24,14 @@ def create_mcp_server(
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover
-        raise EvidenceVaultError("mcp package is not installed; run `uv sync --locked`") from exc
+        raise KnowledgeDeskError("mcp package is not installed; run `uv sync --locked`") from exc
 
-    root = (vault_root or Path(os.environ.get("EVIDENCE_VAULT_ROOT", Path.cwd()))).resolve()
+    root = (vault_root or Path(os.environ.get("KNOWLEDGE_DESK_ROOT", Path.cwd()))).resolve()
 
     server = FastMCP(
-        name="evidence-vault",
+        name="knowledge-desk",
         instructions=(
-            "Read-only Evidence Vault MCP. Prefer sources and observations over wiki synthesis. "
+            "Read-only Knowledge Desk MCP. Prefer sources and observations over wiki synthesis. "
             "Never treat missing evidence as neutral; status unknown means insufficient evidence. "
             "Do not present agent_inference as explicit_statement. "
             f"Vault root: {root}"
@@ -145,7 +145,7 @@ def create_mcp_server(
         topics = [part.strip() for part in topics_csv.split(",") if part.strip()]
         try:
             return _json(read_api.compare_perspectives_api(root, subjects, topics, as_of))
-        except EvidenceVaultError as exc:
+        except KnowledgeDeskError as exc:
             return _json({"success": False, "message": str(exc)})
 
     @server.tool(name="explore_gaps", description="List sources missing observation and/or wiki coverage")
@@ -171,5 +171,5 @@ def run_mcp_server(
 ) -> None:
     server = create_mcp_server(vault_root, host=host, port=port)
     if transport not in {"stdio", "sse", "streamable-http"}:
-        raise EvidenceVaultError(f"unsupported MCP transport: {transport}")
+        raise KnowledgeDeskError(f"unsupported MCP transport: {transport}")
     server.run(transport=transport)

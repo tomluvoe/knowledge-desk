@@ -1,14 +1,14 @@
-# Evidence Vault
+# Knowledge Desk
 
-Evidence Vault is a local-first, model-independent repository for trustworthy evidence and knowledge. Plain Markdown, immutable source artifacts, and version-controlled schemas are the durable truth. It is not a chatbot, vector database, finance product, or replacement for external systems such as CRMs, calendars, portfolios, and code hosts.
+Knowledge Desk is a local-first tool for **collecting, sorting, and discussing a corpus of knowledge**. You ingest sources, record temporal observations, compare perspectives, explore gaps, and grow a cited wiki—with provenance underneath so claims stay grounded. Plain Markdown, immutable originals, and versioned schemas are durable truth. It is not a chatbot, vector database, finance product, or replacement for CRMs, calendars, or code hosts.
 
-The durable evidence chain is:
+The durable chain under the desk:
 
 ```text
 inbox -> original + normalized source -> temporal observation -> wiki synthesis
 ```
 
-Generated indexes and MCP views sit downstream and must always be rebuildable. Start with the [operator guide](docs/operator-guide.md) for day-to-day use; see also [architecture](docs/architecture.md), [artifact model](docs/artifact-model.md), [workflows](docs/workflows.md), [development](docs/development.md), [implementation notes](docs/implementation-notes.md), and the authoritative [agent contract](AGENTS.md).
+Indexes and MCP views are disposable projections. Start with the [operator guide](docs/operator-guide.md); see also [architecture](docs/architecture.md), [artifact model](docs/artifact-model.md), [workflows](docs/workflows.md), [development](docs/development.md), [implementation notes](docs/implementation-notes.md), and [AGENTS.md](AGENTS.md).
 
 ## Install and use
 
@@ -17,24 +17,24 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/). The repos
 ```bash
 uv python install 3.12
 uv sync --locked
-uv run evidence-vault ingest path/to/source.pdf
-uv run evidence-vault ingest inbox/
-uv run evidence-vault fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
-uv run evidence-vault fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --ingest
-uv run evidence-vault observe path/to/observation.json
-uv run evidence-vault observations list --subject entity-example
-uv run evidence-vault observations get obs-20260718-frog-calls
-uv run evidence-vault perspective at --subject entity-example --topic topic-example --as-of 2024-06-01
-uv run evidence-vault index rebuild
-uv run evidence-vault search "keyword" --layer observation
-uv run evidence-vault wiki evolve
-uv run evidence-vault wiki refine-validate
-uv run evidence-vault explore gaps
-uv run evidence-vault explore ask "What does the source say about …?"
-uv run evidence-vault mcp serve --transport stdio
-uv run evidence-vault validate
-uv run evidence-vault lint
-uv run evidence-vault proposal list
+uv run knowledge-desk ingest path/to/source.pdf
+uv run knowledge-desk ingest inbox/
+uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --ingest
+uv run knowledge-desk observe path/to/observation.json
+uv run knowledge-desk observations list --subject entity-example
+uv run knowledge-desk observations get obs-20260718-frog-calls
+uv run knowledge-desk perspective at --subject entity-example --topic topic-example --as-of 2024-06-01
+uv run knowledge-desk index rebuild
+uv run knowledge-desk search "keyword" --layer observation
+uv run knowledge-desk wiki evolve
+uv run knowledge-desk wiki refine-validate
+uv run knowledge-desk explore gaps
+uv run knowledge-desk explore ask "What does the source say about …?"
+uv run knowledge-desk mcp serve --transport stdio
+uv run knowledge-desk validate
+uv run knowledge-desk lint
+uv run knowledge-desk proposal list
 ```
 
 ### Docker MCP (read-only vault mount)
@@ -56,7 +56,7 @@ Supported bootstrap formats are PDF, Markdown (`.md`, `.markdown`), and UTF-8 pl
 uv lock --check
 uv sync --locked
 uv run --offline --no-sync python -m unittest discover -s tests -v
-uv run --offline --no-sync evidence-vault validate
+uv run --offline --no-sync knowledge-desk validate
 ```
 
 See [development](docs/development.md) before adding or upgrading a dependency. `pyproject.toml` is the human-maintained declaration; the committed `uv.lock` is the reproducible resolution and must change in the same review.

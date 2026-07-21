@@ -8,10 +8,10 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from evidence_vault.cli import main
-from evidence_vault.ingest import IngestMetadata, ingest_file
-from evidence_vault.observe import append_observation
-from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
+from knowledge_desk.cli import main
+from knowledge_desk.ingest import IngestMetadata, ingest_file
+from knowledge_desk.observe import append_observation
+from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]

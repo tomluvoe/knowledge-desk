@@ -1,8 +1,8 @@
-from evidence_vault.adapters.base import IngestionAdapter
-from evidence_vault.adapters.markdown import MarkdownAdapter
-from evidence_vault.adapters.pdf import PdfAdapter
-from evidence_vault.adapters.text import TextAdapter
-from evidence_vault.errors import UnsupportedFormatError
+from knowledge_desk.adapters.base import IngestionAdapter
+from knowledge_desk.adapters.markdown import MarkdownAdapter
+from knowledge_desk.adapters.pdf import PdfAdapter
+from knowledge_desk.adapters.text import TextAdapter
+from knowledge_desk.errors import UnsupportedFormatError
 
 
 ADAPTERS: tuple[IngestionAdapter, ...] = (PdfAdapter(), MarkdownAdapter(), TextAdapter())

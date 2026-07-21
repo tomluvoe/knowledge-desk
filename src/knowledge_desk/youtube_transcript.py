@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Callable, Protocol
 from urllib.parse import parse_qs, urlparse
 
-from evidence_vault.errors import EvidenceVaultError
-from evidence_vault.util import safe_filename, write_text_synced
+from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.util import safe_filename, write_text_synced
 
 
 VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -60,7 +60,7 @@ class YouTubeTranscriptApiFetcher:
         try:
             from youtube_transcript_api import YouTubeTranscriptApi, YouTubeTranscriptApiException
         except ImportError as exc:  # pragma: no cover - dependency is required at runtime
-            raise EvidenceVaultError(
+            raise KnowledgeDeskError(
                 "youtube-transcript-api is not installed; run `uv sync --locked`"
             ) from exc
 
@@ -68,9 +68,9 @@ class YouTubeTranscriptApiFetcher:
         try:
             fetched = api.fetch(video_id, languages=languages, preserve_formatting=False)
         except YouTubeTranscriptApiException as exc:
-            raise EvidenceVaultError(f"cannot retrieve YouTube transcript for {video_id}: {exc}") from exc
+            raise KnowledgeDeskError(f"cannot retrieve YouTube transcript for {video_id}: {exc}") from exc
         except Exception as exc:  # network / parser failures from the library
-            raise EvidenceVaultError(f"cannot retrieve YouTube transcript for {video_id}: {exc}") from exc
+            raise KnowledgeDeskError(f"cannot retrieve YouTube transcript for {video_id}: {exc}") from exc
 
         snippets = tuple(
             TranscriptSnippet(text=_clean_snippet_text(item.text), start=float(item.start))
@@ -78,7 +78,7 @@ class YouTubeTranscriptApiFetcher:
             if _clean_snippet_text(item.text)
         )
         if not snippets:
-            raise EvidenceVaultError(f"YouTube transcript for {video_id} is empty")
+            raise KnowledgeDeskError(f"YouTube transcript for {video_id} is empty")
         return TranscriptPayload(
             video_id=fetched.video_id or video_id,
             language=str(fetched.language or fetched.language_code or ""),
@@ -91,7 +91,7 @@ class YouTubeTranscriptApiFetcher:
 def extract_youtube_video_id(url_or_id: str) -> str:
     text = url_or_id.strip()
     if not text:
-        raise EvidenceVaultError("YouTube URL or video id is required")
+        raise KnowledgeDeskError("YouTube URL or video id is required")
     if VIDEO_ID_RE.fullmatch(text):
         return text
 
@@ -114,7 +114,7 @@ def extract_youtube_video_id(url_or_id: str) -> str:
                 if VIDEO_ID_RE.fullmatch(candidate):
                     return candidate
 
-    raise EvidenceVaultError(f"not a supported YouTube URL or video id: {url_or_id}")
+    raise KnowledgeDeskError(f"not a supported YouTube URL or video id: {url_or_id}")
 
 
 def canonical_watch_url(video_id: str) -> str:
@@ -208,7 +208,7 @@ def fetch_youtube_transcript(
         result.status = "created"
         result.message = "transcript written for review; run ingest to publish canonical sources"
         return result
-    except EvidenceVaultError as exc:
+    except KnowledgeDeskError as exc:
         result.message = str(exc)
         return result
     except OSError as exc:
@@ -229,7 +229,7 @@ def fetch_and_ingest_youtube_transcript(
     fetcher: TranscriptFetcher | None = None,
     ingest_fn: Callable[..., list] | None = None,
 ) -> FetchTranscriptResult:
-    from evidence_vault.ingest import IngestMetadata, ingest_path
+    from knowledge_desk.ingest import IngestMetadata, ingest_path
 
     result = fetch_youtube_transcript(
         vault_root,

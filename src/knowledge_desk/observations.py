@@ -4,8 +4,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from evidence_vault.errors import EvidenceVaultError
-from evidence_vault.observe import load_observation_document, observation_path
+from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.observe import load_observation_document, observation_path
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ def load_all_observations(vault_root: Path) -> list[ObservationRecord]:
     for path in iter_observation_paths(vault_root):
         try:
             observation = load_observation_document(path)
-        except EvidenceVaultError:
+        except KnowledgeDeskError:
             continue
         records.append(
             ObservationRecord(

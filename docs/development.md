@@ -1,6 +1,6 @@
 # Development environment
 
-Evidence Vault uses uv for Python selection, its disposable virtual environment, dependency resolution, locking, and command execution. The repository targets Python 3.12 or newer and selects the 3.12 baseline in `.python-version`. `pyproject.toml` declares intent; `uv.lock` records the cross-platform resolution. Neither `.venv/` nor uv caches belong in Git, and no vault artifact depends on either one.
+Knowledge Desk uses uv for Python selection, its disposable virtual environment, dependency resolution, locking, and command execution. The repository targets Python 3.12 or newer and selects the 3.12 baseline in `.python-version`. `pyproject.toml` declares intent; `uv.lock` records the cross-platform resolution. Neither `.venv/` nor uv caches belong in Git, and no vault artifact depends on either one.
 
 ## Create or restore the environment
 
@@ -16,7 +16,7 @@ uv sync --locked
 ```bash
 uv lock --check
 uv run --offline --no-sync python -m unittest discover -s tests -v
-uv run --offline --no-sync evidence-vault validate
+uv run --offline --no-sync knowledge-desk validate
 ```
 
 ## Change dependencies
@@ -39,4 +39,4 @@ GitHub Actions installs the repository-pinned uv release, installs Python 3.12 t
 
 ## Docker
 
-The repository `Dockerfile` uses the pinned Astral uv image matching `tool.uv.required-version`, runs `uv sync --locked --no-dev`, and starts the read-only MCP server. Prefer mounting the vault read-only and setting `EVIDENCE_VAULT_INDEX_PATH` to a writable path outside the mount for disposable FTS rebuilds.
+The repository `Dockerfile` uses the pinned Astral uv image matching `tool.uv.required-version`, runs `uv sync --locked --no-dev`, and starts the read-only MCP server. Prefer mounting the vault read-only and setting `KNOWLEDGE_DESK_INDEX_PATH` to a writable path outside the mount for disposable FTS rebuilds.

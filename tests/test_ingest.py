@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evidence_vault.ingest import IngestMetadata, ingest_file, ingest_path
-from evidence_vault.util import parse_frontmatter, sha256_text
-from evidence_vault.validation import load_schema, schema_errors, validate_locator, validate_vault
+from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path
+from knowledge_desk.util import parse_frontmatter, sha256_text
+from knowledge_desk.validation import load_schema, schema_errors, validate_locator, validate_vault
 from pdf_fixture import write_pdf
 
 

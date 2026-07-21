@@ -5,26 +5,26 @@ import json
 import sys
 from pathlib import Path
 
-from evidence_vault.errors import EvidenceVaultError
-from evidence_vault.explore import explore_ask, explore_gaps
-from evidence_vault.index import rebuild_index, search_index
-from evidence_vault.ingest import IngestMetadata, ingest_path, successful as ingest_successful
-from evidence_vault.lint import lint_vault
-from evidence_vault.mcp_server import run_mcp_server
-from evidence_vault.observe import append_observation_path, successful as observe_successful
-from evidence_vault.observations import get_observation, list_observations_result, parse_observation_query
-from evidence_vault.perspective import compare_perspectives, perspective_at, perspective_timeline
-from evidence_vault.proposals import apply_proposal, list_proposals, reject_proposal
-from evidence_vault.validation import validate_vault
-from evidence_vault.wiki import evolve_wiki, refine_validate_wiki
-from evidence_vault.youtube_transcript import (
+from knowledge_desk.errors import KnowledgeDeskError
+from knowledge_desk.explore import explore_ask, explore_gaps
+from knowledge_desk.index import rebuild_index, search_index
+from knowledge_desk.ingest import IngestMetadata, ingest_path, successful as ingest_successful
+from knowledge_desk.lint import lint_vault
+from knowledge_desk.mcp_server import run_mcp_server
+from knowledge_desk.observe import append_observation_path, successful as observe_successful
+from knowledge_desk.observations import get_observation, list_observations_result, parse_observation_query
+from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
+from knowledge_desk.proposals import apply_proposal, list_proposals, reject_proposal
+from knowledge_desk.validation import validate_vault
+from knowledge_desk.wiki import evolve_wiki, refine_validate_wiki
+from knowledge_desk.youtube_transcript import (
     fetch_and_ingest_youtube_transcript,
     fetch_youtube_transcript,
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="evidence-vault", description="Maintain a trustworthy local Evidence Vault")
+    parser = argparse.ArgumentParser(prog="knowledge-desk", description="Maintain a trustworthy local Knowledge Desk")
     parser.add_argument("--vault", type=Path, default=Path.cwd(), help="vault repository root (default: current directory)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -130,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_transcript.add_argument(
         "--ingest",
         action="store_true",
-        help="after writing the transcript file, run evidence-vault ingest on it",
+        help="after writing the transcript file, run knowledge-desk ingest on it",
     )
 
     index = subparsers.add_parser("index", help="manage the disposable rebuildable search index")
@@ -303,7 +303,7 @@ def _observations_command(vault_root: Path, args: argparse.Namespace) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     if args.observations_command == "relations":
-        from evidence_vault.observations import relation_graph
+        from knowledge_desk.observations import relation_graph
 
         graph = relation_graph(vault_root)
         payload = {
@@ -337,7 +337,7 @@ def _perspective_command(vault_root: Path, args: argparse.Namespace) -> int:
             )
             print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
             return 0 if result.status in {"compared", "partial"} else 2
-    except EvidenceVaultError as exc:
+    except KnowledgeDeskError as exc:
         print(
             json.dumps(
                 {
@@ -420,7 +420,7 @@ def _mcp_command(vault_root: Path, args: argparse.Namespace) -> int:
             host=args.host,
             port=args.port,
         )
-    except EvidenceVaultError as exc:
+    except KnowledgeDeskError as exc:
         print(
             json.dumps(
                 {"operation": "mcp.serve", "success": False, "message": str(exc)},

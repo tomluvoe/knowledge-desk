@@ -4,11 +4,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from evidence_vault.observations import load_all_observations
-from evidence_vault.perspective import applies_at, parse_as_of
-from evidence_vault.util import utc_now
-from evidence_vault.validation import validate_vault
-from evidence_vault.wiki import refine_validate_wiki
+from knowledge_desk.observations import load_all_observations
+from knowledge_desk.perspective import applies_at, parse_as_of
+from knowledge_desk.util import utc_now
+from knowledge_desk.validation import validate_vault
+from knowledge_desk.wiki import refine_validate_wiki
 
 
 @dataclass
@@ -52,7 +52,7 @@ def lint_vault(vault_root: Path) -> LintReport:
                 path=_path_hint(error),
                 code="validate_error",
                 message=error,
-                suggested_action="Repair the canonical artifact so `evidence-vault validate` passes",
+                suggested_action="Repair the canonical artifact so `knowledge-desk validate` passes",
                 evidence=[error],
             )
         )

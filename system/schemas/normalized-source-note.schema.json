@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://evidence-vault.local/schemas/normalized-source-note/1.0.0",
+  "$id": "https://knowledge-desk.local/schemas/normalized-source-note/1.0.0",
   "title": "Normalized source note front matter",
   "type": "object",
   "additionalProperties": false,
