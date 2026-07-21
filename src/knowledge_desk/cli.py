@@ -16,6 +16,7 @@ from knowledge_desk.mcp_server import run_mcp_server
 from knowledge_desk.observe import append_observation_path, successful as observe_successful
 from knowledge_desk.observations import get_observation, list_observations_result, parse_observation_query
 from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
+from knowledge_desk.composition import compose_with_vault, composition_contract
 from knowledge_desk.maintain import (
     default_steps_from_env,
     last_run as maintain_last_run,
@@ -312,6 +313,40 @@ def build_parser() -> argparse.ArgumentParser:
     proposal_reject.add_argument("path", type=Path)
     proposal_reject.add_argument("--reason", help="optional rejection reason")
 
+    compose = subparsers.add_parser(
+        "compose",
+        help="cross-MCP composition: join external context with vault evidence (read-only)",
+    )
+    compose_sub = compose.add_subparsers(dest="compose_command", required=True)
+    compose_sub.add_parser(
+        "contract",
+        help="print the domain-neutral cross-MCP composition contract",
+    )
+    compose_join = compose_sub.add_parser(
+        "join",
+        help="join external claims JSON with vault perspective/ask (nothing written to vault)",
+    )
+    compose_join.add_argument("question", help="composition question for the reasoning layer")
+    compose_join.add_argument(
+        "--external",
+        type=Path,
+        help="path to JSON file of external claims (or {\"claims\": [...]})",
+    )
+    compose_join.add_argument(
+        "--external-json",
+        dest="external_json",
+        help="inline JSON string of external claims (alternative to --external)",
+    )
+    compose_join.add_argument("--subject", help="optional vault subject for perspective/ask scope")
+    compose_join.add_argument("--topic", help="optional vault topic for perspective/ask scope")
+    compose_join.add_argument("--as-of", dest="as_of", help="as-of date for perspective_at")
+    compose_join.add_argument(
+        "--no-ask",
+        action="store_true",
+        help="do not run explore_ask for vault claims",
+    )
+    compose_join.add_argument("--ask-limit", type=int, default=5, dest="ask_limit")
+
     maintain = subparsers.add_parser(
         "maintain",
         help="unattended maintainer: inbox ingest, wiki evolve, lint, index, gap proposals",
@@ -423,6 +458,8 @@ def main(argv: list[str] | None = None) -> int:
         return _proposal_command(vault_root, args)
     if args.command == "maintain":
         return _maintain_command(vault_root, args)
+    if args.command == "compose":
+        return _compose_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -557,6 +594,47 @@ def _proposal_command(vault_root: Path, args: argparse.Namespace) -> int:
         result = reject_proposal(vault_root, args.path, reason=args.reason)
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status == "rejected" else 1
+    return 2
+
+
+def _compose_command(vault_root: Path, args: argparse.Namespace) -> int:
+    try:
+        if args.compose_command == "contract":
+            print(json.dumps(composition_contract(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        if args.compose_command == "join":
+            external_raw: object | None = None
+            if args.external is not None:
+                path = args.external if args.external.is_absolute() else Path.cwd() / args.external
+                external_raw = json.loads(path.read_text(encoding="utf-8"))
+            elif args.external_json:
+                external_raw = args.external_json
+            result = compose_with_vault(
+                vault_root,
+                question=args.question,
+                external_context=external_raw,
+                subject=args.subject,
+                topic=args.topic,
+                as_of=args.as_of,
+                include_ask=not args.no_ask,
+                ask_limit=args.ask_limit,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status == "composed" else 1
+    except (KnowledgeDeskError, OSError, json.JSONDecodeError) as exc:
+        print(
+            json.dumps(
+                {
+                    "operation": f"compose.{getattr(args, 'compose_command', '?')}",
+                    "success": False,
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
     return 2
 
 

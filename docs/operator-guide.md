@@ -191,7 +191,7 @@ See [architecture](architecture.md) and [artifact model](artifact-model.md).
 - Do not fetch or execute source-provided code during ingest.
 - Do not commit API keys, cookies, credentials, or private external system dumps into the vault.
 - YouTube fetch may contact the network; use intentionally. Prefer public captions only.
-- MCP clients should receive only what the vault contains; do not auto-import private portfolio/CRM state (#13 pattern: join at agent level).
+- MCP clients should receive only what the vault contains; do not auto-import private portfolio/CRM state. Join external MCP context at query time ([cross-mcp.md](cross-mcp.md)).
 
 ## Backup, sync, and migration
 
