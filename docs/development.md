@@ -43,4 +43,6 @@ The repository `Dockerfile` uses the pinned Astral uv image matching `tool.uv.re
 
 ## Desk data vs product Git
 
-Do not commit `sources/`, `observations/`, `wiki/`, `memory/`, `inbox/`, `domains/`, `system/logs/`, or `system/update-queue/`. They are gitignored. CI uses temporary desks in tests. Operators run `knowledge-desk init` after clone and `knowledge-desk backup` for tar.gz archives of durable data.
+Do not commit `sources/`, `observations/`, `wiki/`, `memory/`, `inbox/`, `domains/`, `system/logs/`, `system/update-queue/`, `system/subscriptions/`, or `system/jobs/`. They are gitignored. CI uses temporary desks in tests. Operators run `knowledge-desk init` after clone and `knowledge-desk backup` for tar.gz archives of durable data.
+
+Runtime network libraries (`httpx`, `trafilatura`, `youtube-transcript-api`) are used only by explicit fetch commands; keep `ingest`/`validate` offline-safe and inject fakes in unit tests.
