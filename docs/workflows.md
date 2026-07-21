@@ -30,6 +30,18 @@ Run `knowledge-desk ingest <file-or-directory>`. Directory ingestion is **non-re
 
 The operation hashes first, checks duplicates, extracts in staging, preserves the original bytes, writes the manifest and normalized note, validates them, publishes atomically, and appends an ingest-log event. Exit status is nonzero if any requested input fails. JSON output makes no-op, created, revision, and failed states distinguishable.
 
+## Fetch web pages
+
+```bash
+uv run knowledge-desk fetch-page "https://example.com/article"
+uv run knowledge-desk fetch-page "https://example.com/article" --out inbox/article.md
+uv run knowledge-desk fetch-page "https://example.com/article" --ingest --title "Article title"
+```
+
+`fetch-page` is a **network-enabled** boundary (not used by plain `ingest`/`validate`). It accepts **http/https only**, applies timeout (default 30s), response size cap (default 5 MiB), and redirect limits, then extracts **main content** with locked `trafilatura` into reviewable Markdown under `inbox/` (header: canonical URL, final URL, fetch time, content-type). Prefer reviewing the inbox file, then `uv run knowledge-desk ingest inbox/web-….md --url "…"`. Use `--ingest` for one-shot publish.
+
+Remote HTML is untrusted data—never executed. Scripts/styles/nav chrome are stripped by extraction heuristics; the result is cleaned text, not a full DOM archive. Empty extractions (paywall, CAPTCHA, non-article) fail clearly. Non-HTML content-types and undecodable bodies are rejected. Unit tests inject fake HTTP responses and never require live network. SPA JavaScript rendering and recursive crawls are out of scope.
+
 ## Fetch YouTube transcripts
 
 ```bash

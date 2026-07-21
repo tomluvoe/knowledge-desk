@@ -27,6 +27,7 @@ from knowledge_desk.proposals import apply_proposal, list_proposals, reject_prop
 from knowledge_desk.subscribe import add_subscription, list_subscriptions, poll_subscriptions
 from knowledge_desk.validation import validate_vault
 from knowledge_desk.wiki import evolve_wiki, refine_validate_wiki
+from knowledge_desk.fetch_page import fetch_and_ingest_page, fetch_page
 from knowledge_desk.youtube_transcript import (
     fetch_and_ingest_youtube_transcript,
     fetch_youtube_transcript,
@@ -192,6 +193,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--ingest",
         action="store_true",
         help="after writing the transcript file, run knowledge-desk ingest on it",
+    )
+
+    fetch_page_cmd = subparsers.add_parser(
+        "fetch-page",
+        help="fetch a public web page to cleaned inbox Markdown (network; optional --ingest)",
+    )
+    fetch_page_cmd.add_argument("url", help="http(s) URL of a public HTML page")
+    fetch_page_cmd.add_argument(
+        "--out",
+        type=Path,
+        help="output path (default: inbox/web-<host>-<hash>.md)",
+    )
+    fetch_page_cmd.add_argument("--title", help="optional document title override")
+    fetch_page_cmd.add_argument("--creator", help="optional creator for ingest metadata")
+    fetch_page_cmd.add_argument("--language", help="optional language for ingest metadata")
+    fetch_page_cmd.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="HTTP timeout seconds (default 30)",
+    )
+    fetch_page_cmd.add_argument(
+        "--max-bytes",
+        type=int,
+        default=5 * 1024 * 1024,
+        dest="max_bytes",
+        help="max response body size in bytes (default 5 MiB)",
+    )
+    fetch_page_cmd.add_argument(
+        "--ingest",
+        action="store_true",
+        help="after writing the Markdown file, run knowledge-desk ingest on it",
     )
 
     index = subparsers.add_parser("index", help="manage the disposable rebuildable search index")
@@ -370,6 +403,8 @@ def main(argv: list[str] | None = None) -> int:
         return _subscribe_command(vault_root, args)
     if args.command == "fetch-transcript":
         return _fetch_transcript_command(vault_root, args)
+    if args.command == "fetch-page":
+        return _fetch_page_command(vault_root, args)
     if args.command == "index":
         return _index_command(vault_root, args)
     if args.command == "search":
@@ -674,6 +709,35 @@ def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int
             languages=languages,
             include_timestamps=not args.no_timestamps,
             title=args.title,
+        )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+    if result.status != "created":
+        return 1
+    if args.ingest and not (result.ingest or {}).get("success"):
+        return 1
+    return 0
+
+
+def _fetch_page_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.ingest:
+        result = fetch_and_ingest_page(
+            vault_root,
+            args.url,
+            output_path=args.out,
+            title=args.title,
+            creator=args.creator,
+            language=args.language,
+            timeout_seconds=args.timeout,
+            max_bytes=args.max_bytes,
+        )
+    else:
+        result = fetch_page(
+            vault_root,
+            args.url,
+            output_path=args.out,
+            title=args.title,
+            timeout_seconds=args.timeout,
+            max_bytes=args.max_bytes,
         )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     if result.status != "created":

@@ -12,4 +12,6 @@ Observation append (`knowledge-desk observe`) validates schema and resolvable ev
 
 YouTube transcript fetch (`fetch-transcript`) uses the uv-locked `youtube-transcript-api` package behind an injectable fetcher boundary so unit tests never require network. The downloaded Markdown is ordinary text for the existing ingest adapters; the transcript file is the immutable original (not the video stream).
 
+Web page fetch (`fetch-page`) uses locked `httpx` (timeouts, redirects, size cap) and `trafilatura` (main-content Markdown). The network boundary is injectable for offline tests; cleaned Markdown under `inbox/` is the immutable original after ingest (not a live DOM snapshot).
+
 Mechanical living-wiki evolve (entity/topic/source-summary/cross-source/comparison/event pages), refine-validate, rebuildable FTS search, dimensional perspective compare, source-gap explore, MCP, vault `lint`, offline eval corpus, exclusive write locking, proposal list/apply/reject, desk `init`, tar.gz `backup`/`restore` (data out of product Git), and unattended `maintain once|loop` (Compose `maintainer` profile, durable `system/jobs/`) are implemented. LLM observation extraction and OCR/STT remain open.

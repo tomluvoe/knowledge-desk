@@ -24,6 +24,8 @@ uv run knowledge-desk backup --out backups/desk.tar.gz
 
 uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
 uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --ingest
+uv run knowledge-desk fetch-page "https://example.com/article"
+uv run knowledge-desk fetch-page "https://example.com/article" --ingest --title "Article"
 uv run knowledge-desk observe path/to/observation.json
 uv run knowledge-desk observations list --subject entity-example
 uv run knowledge-desk observations get obs-20260718-frog-calls
