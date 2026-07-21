@@ -6,7 +6,7 @@ import os
 import re
 import stat
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,18 @@ CONTENT_END = "<!-- ev-content-end -->"
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def parse_utc_datetime(value: str, *, date_only_time: time = time.min) -> datetime:
+    """Parse ISO/RFC3339 text and normalize it to an aware UTC datetime."""
+    text = value.strip()
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        return datetime.combine(date.fromisoformat(text), date_only_time, tzinfo=timezone.utc)
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def sha256_file(path: Path) -> str:

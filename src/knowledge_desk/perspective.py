@@ -7,6 +7,7 @@ from typing import Any
 
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.observations import ObservationQuery, list_observations
+from knowledge_desk.util import parse_utc_datetime
 
 
 @dataclass
@@ -43,6 +44,7 @@ class TimelineEvent:
     orientation: str | None
     assertion: str
     related_observation_id: str | None = None
+    relations: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -68,20 +70,22 @@ def parse_as_of(value: str) -> datetime:
     text = value.strip()
     if not text:
         raise KnowledgeDeskError("as_of must be a non-empty date or datetime")
-    if len(text) == 10 and text[4] == "-" and text[7] == "-":
-        try:
-            day = date.fromisoformat(text)
-        except ValueError as exc:
-            raise KnowledgeDeskError(f"invalid as_of date: {value}") from exc
-        return datetime.combine(day, time(23, 59, 59), tzinfo=timezone.utc)
-    normalized = text.replace("Z", "+00:00")
     try:
-        parsed = datetime.fromisoformat(normalized)
+        return parse_utc_datetime(text, date_only_time=time.max)
     except ValueError as exc:
-        raise KnowledgeDeskError(f"invalid as_of datetime: {value}") from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        kind = "date" if len(text) == 10 else "datetime"
+        raise KnowledgeDeskError(f"invalid as_of {kind}: {value}") from exc
+
+
+def parse_from(value: str) -> datetime:
+    """Parse a timeline lower bound; a date begins at midnight UTC."""
+    text = value.strip()
+    if not text:
+        raise KnowledgeDeskError("timeline start must be a non-empty date or datetime")
+    try:
+        return parse_utc_datetime(text, date_only_time=time.min)
+    except ValueError as exc:
+        raise KnowledgeDeskError(f"invalid timeline start: {value}") from exc
 
 
 def effective_time(observation: dict[str, Any]) -> datetime | None:
@@ -91,11 +95,8 @@ def effective_time(observation: dict[str, Any]) -> datetime | None:
         if value is None or value == "":
             continue
         try:
-            if isinstance(value, str) and len(value) == 10 and value[4] == "-":
-                day = date.fromisoformat(value)
-                return datetime.combine(day, time.min, tzinfo=timezone.utc)
-            return parse_as_of(str(value))
-        except (KnowledgeDeskError, ValueError):
+            return parse_utc_datetime(str(value), date_only_time=time.min)
+        except ValueError:
             continue
     return None
 
@@ -240,7 +241,7 @@ def perspective_timeline(
 ) -> TimelineResult:
     """List meaningful perspective changes for subject+topic over an optional range."""
     result = TimelineResult(subject=subject, topic=topic, start=start, end=end)
-    start_dt = parse_as_of(start) if start else None
+    start_dt = parse_from(start) if start else None
     end_dt = parse_as_of(end) if end else None
     records = list_observations(vault_root, ObservationQuery(subject=subject, topic=topic))
     if not records:
@@ -261,17 +262,9 @@ def perspective_timeline(
         obs_id = obs.get("observation_id")
         if not isinstance(obs_id, str):
             continue
-        change = "introduced"
-        related_id: str | None = None
-        for relation in obs.get("relations", []):
-            if not isinstance(relation, dict):
-                continue
-            rel_type = relation.get("type")
-            target = relation.get("observation_id")
-            if rel_type in {"confirms", "refines", "contradicts", "supersedes"} and isinstance(target, str):
-                change = str(rel_type)
-                related_id = target
-                break
+        relations = _timeline_relations(obs)
+        change = relations[0]["type"] if relations else "introduced"
+        related_id = relations[0]["observation_id"] if relations else None
         events.append(
             TimelineEvent(
                 at=when.isoformat().replace("+00:00", "Z"),
@@ -280,9 +273,15 @@ def perspective_timeline(
                 orientation=obs.get("orientation") if isinstance(obs.get("orientation"), str) else None,
                 assertion=str(obs.get("assertion") or ""),
                 related_observation_id=related_id,
+                relations=relations,
             )
         )
-    events.sort(key=lambda item: (item.at, item.observation_id))
+    events.sort(
+        key=lambda item: (
+            parse_utc_datetime(item.at),
+            item.observation_id,
+        )
+    )
     result.events = [event.to_dict() for event in events]
     if not events:
         result.status = "unknown"
@@ -291,6 +290,20 @@ def perspective_timeline(
         result.status = "supported"
         result.reason = "timeline_events"
     return result
+
+
+def _timeline_relations(observation: dict[str, Any]) -> list[dict[str, str]]:
+    relations: list[dict[str, str]] = []
+    for relation in observation.get("relations", []):
+        if not isinstance(relation, dict):
+            continue
+        rel_type = relation.get("type")
+        target = relation.get("observation_id")
+        if rel_type in {"confirms", "refines", "contradicts", "supersedes"} and isinstance(
+            target, str
+        ):
+            relations.append({"type": str(rel_type), "observation_id": target})
+    return relations
 
 
 def _is_conflict(left: dict[str, Any], right: dict[str, Any]) -> bool:

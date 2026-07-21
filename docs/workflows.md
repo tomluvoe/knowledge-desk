@@ -167,12 +167,13 @@ uv run knowledge-desk perspective timeline --subject entity-alpha --topic topic-
 `perspective at` returns the supported view for a subject+topic as of a date or datetime:
 
 - An observation applies only if its effective time (`valid_at`, else `expressed_at` / `publication_date` / `recorded_at`) is on or before `as_of` and any `horizon` still covers that day.
+- Date-only `as_of` and timeline `--to` values include the complete day (including fractional timestamps in its final second); date-only `--from` starts at midnight. Offset timestamps are normalized to UTC before ordering.
 - Superseded observations that still fall in range are dropped when a superseding observation also applies.
 - No applying observation yields `status=unknown` and `reason=insufficient_evidence` — never a synthetic neutral stance.
 - An observation whose orientation is `unknown` is still `supported` (explicit unknown ≠ missing evidence).
 - Concurrent disagreeing active observations yield `status=conflicted` with the latest primary and `conflicting_observation_ids`.
 
-`perspective timeline` lists introduced/confirms/refines/contradicts/supersedes events in time order.
+`perspective timeline` lists introduced/confirms/refines/contradicts/supersedes events in time order. Each event's `relations` array preserves every material outgoing relation; `change` and `related_observation_id` remain a first-relation summary for compatibility.
 
 ```bash
 uv run knowledge-desk perspective compare \
