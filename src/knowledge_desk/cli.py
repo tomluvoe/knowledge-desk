@@ -28,6 +28,14 @@ from knowledge_desk.proposals import apply_proposal, list_proposals, reject_prop
 from knowledge_desk.subscribe import add_subscription, list_subscriptions, poll_subscriptions
 from knowledge_desk.validation import validate_vault
 from knowledge_desk.wiki import evolve_wiki, refine_validate_wiki
+from knowledge_desk.workspace import (
+    add_page as workspace_add_page,
+    benchtest_workspace,
+    get_workspace,
+    init_workspace,
+    list_workspaces,
+    refine_workspace,
+)
 from knowledge_desk.fetch_page import fetch_and_ingest_page, fetch_page
 from knowledge_desk.youtube_transcript import (
     fetch_and_ingest_youtube_transcript,
@@ -313,6 +321,64 @@ def build_parser() -> argparse.ArgumentParser:
     proposal_reject.add_argument("path", type=Path)
     proposal_reject.add_argument("--reason", help="optional rejection reason")
 
+    workspace = subparsers.add_parser(
+        "workspace",
+        help="user-owned memory workspaces (thesis/framework/…); not auto-evolved",
+    )
+    workspace_sub = workspace.add_subparsers(dest="workspace_command", required=True)
+    ws_init = workspace_sub.add_parser("init", help="create memory/workspaces/<id>/")
+    ws_init.add_argument("--title", required=True)
+    ws_init.add_argument(
+        "--kind",
+        default="thesis",
+        choices=sorted(["thesis", "framework", "prediction_set", "research_program", "process", "other"]),
+    )
+    ws_init.add_argument("--id", dest="workspace_id", help="workspace id (ws-…)")
+    ws_init.add_argument("--status", default="active", choices=["active", "draft", "superseded", "archived"])
+    ws_init.add_argument("--as-of", dest="as_of")
+    ws_init.add_argument("--subject", action="append", dest="subjects", default=[])
+    ws_init.add_argument("--topic", action="append", dest="topics", default=[])
+    ws_init.add_argument("--statement", help="initial spine stance text")
+    ws_init.add_argument("--observation", action="append", dest="observation_ids", default=[])
+    workspace_sub.add_parser("list", help="list workspaces under memory/workspaces/")
+    ws_get = workspace_sub.add_parser("get", help="show workspace spine, pages, changelog tail")
+    ws_get.add_argument("--id", dest="workspace_id", required=True)
+    ws_page = workspace_sub.add_parser("add-page", help="add pillar/prediction/note page")
+    ws_page.add_argument("--id", dest="workspace_id", required=True)
+    ws_page.add_argument("--title", required=True)
+    ws_page.add_argument(
+        "--page-kind",
+        dest="page_kind",
+        default="pillar",
+        choices=["pillar", "prediction", "framework", "note", "invalidation", "other"],
+    )
+    ws_page.add_argument("--page-id", dest="page_id")
+    ws_page.add_argument("--body", help="markdown body")
+    ws_page.add_argument("--observation", action="append", dest="observation_ids", default=[])
+    ws_page.add_argument("--prior", action="store_true", help="mark as intentional prior (not evidence-backed)")
+    ws_refine = workspace_sub.add_parser("refine", help="explicit refine with changelog entry")
+    ws_refine.add_argument("--id", dest="workspace_id", required=True)
+    ws_refine.add_argument("--summary", required=True, help="changelog summary of what changed")
+    ws_refine.add_argument("--page-id", dest="page_id", help="page to refine (default: spine)")
+    ws_refine.add_argument("--body", help="replacement markdown body")
+    ws_refine.add_argument("--title")
+    ws_refine.add_argument("--status", choices=["active", "draft", "superseded", "archived"])
+    ws_refine.add_argument("--as-of", dest="as_of")
+    ws_refine.add_argument("--observation", action="append", dest="observation_ids", default=[])
+    ws_refine.add_argument("--reason", help="why this refine (optional)")
+    ws_bench = workspace_sub.add_parser(
+        "benchtest",
+        help="stress-test workspace claims against corpus (does not auto-mutate pages)",
+    )
+    ws_bench.add_argument("--id", dest="workspace_id", required=True)
+    ws_bench.add_argument("--since", help="only consider observations on/after this timestamp")
+    ws_bench.add_argument("--source-id", dest="source_id")
+    ws_bench.add_argument(
+        "--no-persist",
+        action="store_true",
+        help="do not write benchtests/*.json or changelog entry",
+    )
+
     compose = subparsers.add_parser(
         "compose",
         help="cross-MCP composition: join external context with vault evidence (read-only)",
@@ -460,6 +526,8 @@ def main(argv: list[str] | None = None) -> int:
         return _maintain_command(vault_root, args)
     if args.command == "compose":
         return _compose_command(vault_root, args)
+    if args.command == "workspace":
+        return _workspace_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -594,6 +662,85 @@ def _proposal_command(vault_root: Path, args: argparse.Namespace) -> int:
         result = reject_proposal(vault_root, args.path, reason=args.reason)
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status == "rejected" else 1
+    return 2
+
+
+def _workspace_command(vault_root: Path, args: argparse.Namespace) -> int:
+    try:
+        if args.workspace_command == "init":
+            result = init_workspace(
+                vault_root,
+                title=args.title,
+                kind=args.kind,
+                workspace_id=args.workspace_id,
+                status=args.status,
+                as_of=args.as_of,
+                subject_refs=args.subjects or None,
+                topic_refs=args.topics or None,
+                statement=args.statement,
+                observation_ids=args.observation_ids or None,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status == "created" else 1
+        if args.workspace_command == "list":
+            print(json.dumps(list_workspaces(vault_root), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        if args.workspace_command == "get":
+            payload = get_workspace(vault_root, args.workspace_id)
+            print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if payload.get("success") else 1
+        if args.workspace_command == "add-page":
+            result = workspace_add_page(
+                vault_root,
+                args.workspace_id,
+                title=args.title,
+                page_kind=args.page_kind,
+                body=args.body,
+                page_id=args.page_id,
+                observation_ids=args.observation_ids or None,
+                prior=args.prior,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status == "created" else 1
+        if args.workspace_command == "refine":
+            result = refine_workspace(
+                vault_root,
+                args.workspace_id,
+                summary=args.summary,
+                page_id=args.page_id,
+                body=args.body,
+                title=args.title,
+                observation_ids=args.observation_ids or None,
+                status=args.status,
+                as_of=args.as_of,
+                reason=args.reason,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status == "refined" else 1
+        if args.workspace_command == "benchtest":
+            report = benchtest_workspace(
+                vault_root,
+                args.workspace_id,
+                since=args.since,
+                source_id=args.source_id,
+                persist=not args.no_persist,
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if report.get("status") == "ok" else 1
+    except KnowledgeDeskError as exc:
+        print(
+            json.dumps(
+                {
+                    "operation": f"workspace.{getattr(args, 'workspace_command', '?')}",
+                    "success": False,
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
     return 2
 
 

@@ -80,6 +80,12 @@ def apply_proposal(vault_root: Path, proposal_path: Path) -> ProposalResult:
                 if obs_result.status not in {"created", "noop"}:
                     raise ValidationError(obs_result.message)
                 applied = {"observation": obs_result.to_dict()}
+            elif kind == "workspace_refine_proposal":
+                from knowledge_desk.workspace import apply_workspace_refine_proposal
+
+                applied = {"workspace": apply_workspace_refine_proposal(vault_root, payload)}
+            elif kind == "compile_from_ask_proposal":
+                applied = _apply_compile_from_ask(vault_root, payload)
             else:
                 raise KnowledgeDeskError(f"unsupported or incomplete proposal kind: {kind!r}")
 
@@ -163,6 +169,65 @@ def _apply_explore_ask(vault_root: Path, payload: dict[str, Any]) -> dict[str, o
     memory = payload.get("proposed_memory_open_question")
     if isinstance(memory, dict) and payload.get("ask_status") == "insufficient_evidence":
         details["memory"] = _write_memory_record(vault_root, memory)
+    return details
+
+
+def _apply_compile_from_ask(vault_root: Path, payload: dict[str, Any]) -> dict[str, object]:
+    """Apply compile-from-ask: observations (if complete) then optional wiki evolve scope."""
+    details: dict[str, object] = {"action": "compile_from_ask"}
+    observations = payload.get("proposed_observations")
+    if not isinstance(observations, list):
+        observations = []
+        single = payload.get("proposed_observation_stub") or payload.get("observation")
+        if isinstance(single, dict):
+            observations = [single]
+
+    applied_obs: list[dict[str, object]] = []
+    for observation in observations:
+        if not isinstance(observation, dict):
+            continue
+        subjects = observation.get("subjects") if isinstance(observation.get("subjects"), list) else []
+        topics = observation.get("topics") if isinstance(observation.get("topics"), list) else []
+        subject_ids = [s.get("ref_id") for s in subjects if isinstance(s, dict)]
+        topic_ids = [t.get("ref_id") for t in topics if isinstance(t, dict)]
+        if "entity-todo" in subject_ids or "topic-todo" in topic_ids:
+            applied_obs.append(
+                {
+                    "status": "skipped",
+                    "message": "observation stub still has TODO subjects/topics; edit before apply",
+                }
+            )
+            continue
+        obs_result = _append_observation_unlocked(vault_root, observation)
+        if obs_result.status not in {"created", "noop"}:
+            raise ValidationError(obs_result.message)
+        applied_obs.append(obs_result.to_dict())
+    details["observations"] = applied_obs
+
+    evolve_scope = payload.get("wiki_evolve") if isinstance(payload.get("wiki_evolve"), dict) else {}
+    run_evolve = bool(payload.get("run_wiki_evolve", True))
+    if run_evolve:
+        from knowledge_desk.wiki import _evolve_wiki_unlocked
+
+        subject = evolve_scope.get("subject") if isinstance(evolve_scope.get("subject"), str) else None
+        topic = evolve_scope.get("topic") if isinstance(evolve_scope.get("topic"), str) else None
+        observation_ids = evolve_scope.get("observation_ids")
+        if not isinstance(observation_ids, list):
+            observation_ids = [
+                item.get("observation_id")
+                for item in applied_obs
+                if isinstance(item, dict) and isinstance(item.get("observation_id"), str)
+            ]
+            observation_ids = [i for i in observation_ids if i] or None
+        evolve_result = _evolve_wiki_unlocked(
+            vault_root,
+            observation_ids=observation_ids,
+            subject=subject,
+            topic=topic,
+        )
+        details["wiki_evolve"] = evolve_result.to_dict()
+    else:
+        details["wiki_evolve"] = {"status": "skipped", "message": "run_wiki_evolve=false"}
     return details
 
 
