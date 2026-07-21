@@ -39,4 +39,8 @@ GitHub Actions installs the repository-pinned uv release, installs Python 3.12 t
 
 ## Docker
 
-The repository `Dockerfile` uses the pinned Astral uv image matching `tool.uv.required-version`, runs `uv sync --locked --no-dev`, and starts the read-only MCP server. Prefer mounting the vault read-only and setting `KNOWLEDGE_DESK_INDEX_PATH` to a writable path outside the mount for disposable FTS rebuilds.
+The repository `Dockerfile` uses the pinned Astral uv image matching `tool.uv.required-version`, runs `uv sync --locked --no-dev`, and starts the read-only MCP server. Prefer mounting the desk data root read-only and setting `KNOWLEDGE_DESK_INDEX_PATH` to a writable path outside the mount for disposable FTS rebuilds.
+
+## Desk data vs product Git
+
+Do not commit `sources/`, `observations/`, `wiki/`, `memory/`, `inbox/`, `domains/`, `system/logs/`, or `system/update-queue/`. They are gitignored. CI uses temporary desks in tests. Operators run `knowledge-desk init` after clone and `knowledge-desk backup` for tar.gz archives of durable data.

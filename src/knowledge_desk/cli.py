@@ -5,10 +5,12 @@ import json
 import sys
 from pathlib import Path
 
+from knowledge_desk.backup import backup_vault, restore_vault
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.explore import explore_ask, explore_gaps
 from knowledge_desk.index import rebuild_index, search_index
 from knowledge_desk.ingest import IngestMetadata, ingest_path, successful as ingest_successful
+from knowledge_desk.layout import init_vault
 from knowledge_desk.lint import lint_vault
 from knowledge_desk.mcp_server import run_mcp_server
 from knowledge_desk.observe import append_observation_path, successful as observe_successful
@@ -25,8 +27,39 @@ from knowledge_desk.youtube_transcript import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="knowledge-desk", description="Maintain a trustworthy local Knowledge Desk")
-    parser.add_argument("--vault", type=Path, default=Path.cwd(), help="vault repository root (default: current directory)")
+    parser.add_argument("--vault", type=Path, default=Path.cwd(), help="desk/vault root (default: current directory)")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    init_cmd = subparsers.add_parser(
+        "init",
+        help="create empty local data directories (sources, wiki, …) without overwriting existing data",
+    )
+    init_cmd.add_argument(
+        "--no-readmes",
+        action="store_true",
+        help="do not write local README placeholders",
+    )
+
+    backup_cmd = subparsers.add_parser("backup", help="write a tar.gz archive of durable desk data")
+    backup_cmd.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="output archive path (e.g. backups/desk-2026-07-21.tar.gz)",
+    )
+    backup_cmd.add_argument(
+        "--include-index",
+        action="store_true",
+        help="also include disposable system/.index (default: data only)",
+    )
+
+    restore_cmd = subparsers.add_parser("restore", help="restore durable desk data from a backup tar.gz")
+    restore_cmd.add_argument("archive", type=Path, help="backup archive path")
+    restore_cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite existing non-empty data directories",
+    )
 
     ingest = subparsers.add_parser("ingest", help="ingest a file or directory")
     ingest.add_argument("path", type=Path)
@@ -226,6 +259,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     vault_root = args.vault.resolve()
+    if args.command == "init":
+        result = init_vault(vault_root, write_readmes=not args.no_readmes)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "initialized" else 1
+    if args.command == "backup":
+        result = backup_vault(vault_root, args.out, include_index=args.include_index)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "created" else 1
+    if args.command == "restore":
+        result = restore_vault(vault_root, args.archive, force=args.force)
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if result.status == "restored" else 1
     if args.command == "ingest":
         metadata = IngestMetadata(
             title=args.title,

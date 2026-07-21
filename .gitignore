@@ -17,6 +17,23 @@ build/
 dist/
 htmlcov/
 .coverage
+
+# Disposable / generated runtime state
 system/.staging/
 system/.index/
 system/.locks/
+
+# Per-desk durable data (local only; use `knowledge-desk backup` / restore)
+# Product code clones should not track personal corpus content.
+/sources/
+/observations/
+/wiki/
+/memory/
+/inbox/
+/domains/
+/system/logs/
+/system/update-queue/
+
+# Local backup archives
+/backups/
+*.tar.gz

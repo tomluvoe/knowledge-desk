@@ -17,8 +17,11 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/). The repos
 ```bash
 uv python install 3.12
 uv sync --locked
+uv run knowledge-desk init   # local data dirs (gitignored)
 uv run knowledge-desk ingest path/to/source.pdf
 uv run knowledge-desk ingest inbox/
+uv run knowledge-desk backup --out backups/desk.tar.gz
+
 uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
 uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID" --ingest
 uv run knowledge-desk observe path/to/observation.json
@@ -48,7 +51,7 @@ Supported bootstrap formats are PDF, Markdown (`.md`, `.markdown`), and UTF-8 pl
 
 `observe` appends a temporal observation JSON document under `observations/`. It validates the schema, resolves every evidence locator against immutable sources, rejects self-relations and relation cycles, and never rewrites an existing `observation_id` (identical re-submit is a no-op).
 
-**Obsidian is optional:** open the repository root as a vault to browse Markdown notes. All canonical notes are ordinary files; `system/` holds schemas, templates, logs, and queues. See the [operator guide](docs/operator-guide.md) for ingest, layers, MCP, Git, privacy, and backup.
+**Obsidian is optional:** open the desk root as a vault to browse Markdown notes. **Git tracks product code only**; corpus data (`sources/`, `wiki/`, …) is local—use `init` after clone and `backup`/`restore` for archives. See the [operator guide](docs/operator-guide.md).
 
 ## Development
 

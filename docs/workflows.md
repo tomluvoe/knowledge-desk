@@ -1,5 +1,25 @@
 # Workflows
 
+## Multi-desk clones, init, and backup
+
+The Git repository is the **product** (code + schemas + docs). Each clone or worktree can hold a separate corpus under local data directories that are **gitignored**.
+
+```bash
+git clone git@github.com:tomluvoe/knowledge-desk.git my-desk
+cd my-desk
+uv sync --locked
+uv run knowledge-desk init
+uv run knowledge-desk ingest path/to/source.pdf
+# durable data is local — commit code changes only, not sources/wiki/…
+
+uv run knowledge-desk backup --out backups/my-desk.tar.gz
+uv run knowledge-desk restore backups/my-desk.tar.gz --vault /path/to/other-desk --force
+```
+
+`init` creates empty data trees without overwriting existing files. `backup` archives durable data only (not `.venv`, `.staging`, `.locks`; index only with `--include-index`). `restore` refuses non-empty data trees unless `--force`. Prefer encrypting archives out of band (e.g. GPG) if they contain private sources.
+
+Migration from older checkouts that committed data dirs: keep local files, ensure `.gitignore` lists them, then `git rm -r --cached sources observations wiki memory inbox domains system/logs system/update-queue` and commit. Existing files remain on disk.
+
 ## Concurrency and single-writer
 
 v0.1 serializes **canonical writes** (ingest publish, observe append, wiki evolve, proposal apply/reject) through an exclusive lock at `system/.locks/writer.lock` (gitignored). Concurrent readers (`validate`, `lint`, `search`, MCP tools) do not take the lock. If a writer cannot acquire the lock within ~30s it fails clearly rather than interleaving publishes.
