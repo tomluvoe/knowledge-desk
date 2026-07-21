@@ -20,7 +20,7 @@ Obsidian is an **optional** viewer over ordinary Markdown and folders. The vault
 |------|---------|------|
 | `src/`, `docs/`, `system/schemas/`, templates, examples | Yes | Product |
 | `inbox/`, `sources/`, `observations/`, `wiki/`, `memory/`, `domains/` | No (local) | Desk corpus |
-| `system/logs/`, `system/update-queue/` | No (local) | Ops / proposals |
+| `system/logs/`, `system/update-queue/`, `system/jobs/` | No (local) | Ops / proposals / maintainer ledger |
 | `system/.staging/`, `system/.index/`, `system/.locks/` | No | Disposable |
 
 ## Quick start

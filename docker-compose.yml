@@ -1,7 +1,16 @@
-# Read-only MCP server over the local vault directory.
-# Usage:
+# Knowledge Desk services.
+#
+# MCP (read-only vault mount) — default:
+#   docker compose up --build mcp
+#
+# Maintainer worker (read-write vault mount) — unattended inbox/wiki/lint jobs:
+#   docker compose up --build maintainer
+# Or both:
 #   docker compose up --build
-# Vault is mounted read-only; disposable FTS index is written outside the mount.
+#
+# Secrets (API keys for optional future LLM extractors) must be supplied at
+# runtime via environment / compose secrets — never stored in the vault.
+
 services:
   mcp:
     build: .
@@ -33,4 +42,35 @@ services:
         "0.0.0.0",
         "--port",
         "8000",
+      ]
+
+  maintainer:
+    build: .
+    image: knowledge-desk-maintainer:local
+    profiles: ["maintainer", "all"]
+    environment:
+      KNOWLEDGE_DESK_ROOT: /vault
+      KNOWLEDGE_DESK_INDEX_PATH: /tmp/knowledge-desk-index.sqlite
+      # Comma-separated steps; override to disable subscribe poll etc.
+      KNOWLEDGE_DESK_MAINTAIN_STEPS: ${KNOWLEDGE_DESK_MAINTAIN_STEPS:-inbox_ingest,subscribe_poll,wiki_evolve,lint,index_rebuild,explore_gaps}
+      # Seconds between cycles (also passed as --interval).
+      KNOWLEDGE_DESK_MAINTAIN_INTERVAL: ${KNOWLEDGE_DESK_MAINTAIN_INTERVAL:-300}
+    volumes:
+      - type: bind
+        source: .
+        target: /vault
+        read_only: false
+    command:
+      [
+        "uv",
+        "run",
+        "--offline",
+        "--no-sync",
+        "knowledge-desk",
+        "--vault",
+        "/vault",
+        "maintain",
+        "loop",
+        "--interval",
+        "${KNOWLEDGE_DESK_MAINTAIN_INTERVAL:-300}",
       ]

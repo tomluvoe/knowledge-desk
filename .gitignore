@@ -34,6 +34,7 @@ system/.locks/
 /system/logs/
 /system/update-queue/
 /system/subscriptions/
+/system/jobs/
 
 # Local backup archives
 /backups/

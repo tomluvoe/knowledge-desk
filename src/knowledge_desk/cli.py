@@ -16,6 +16,13 @@ from knowledge_desk.mcp_server import run_mcp_server
 from knowledge_desk.observe import append_observation_path, successful as observe_successful
 from knowledge_desk.observations import get_observation, list_observations_result, parse_observation_query
 from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
+from knowledge_desk.maintain import (
+    default_steps_from_env,
+    last_run as maintain_last_run,
+    parse_steps,
+    run_maintain_cycle,
+    run_maintain_loop,
+)
 from knowledge_desk.proposals import apply_proposal, list_proposals, reject_proposal
 from knowledge_desk.subscribe import add_subscription, list_subscriptions, poll_subscriptions
 from knowledge_desk.validation import validate_vault
@@ -205,7 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     wiki_sub = wiki.add_subparsers(dest="wiki_command", required=True)
     wiki_evolve = wiki_sub.add_parser(
         "evolve",
-        help="create/update entity and topic wiki pages from observations (mechanical synthesis)",
+        help="compile living wiki pages (entities, topics, source summaries, comparisons, events)",
     )
     wiki_evolve.add_argument(
         "--observation",
@@ -271,6 +278,41 @@ def build_parser() -> argparse.ArgumentParser:
     proposal_reject = proposal_sub.add_parser("reject", help="reject and archive a proposal")
     proposal_reject.add_argument("path", type=Path)
     proposal_reject.add_argument("--reason", help="optional rejection reason")
+
+    maintain = subparsers.add_parser(
+        "maintain",
+        help="unattended maintainer: inbox ingest, wiki evolve, lint, index, gap proposals",
+    )
+    maintain_sub = maintain.add_subparsers(dest="maintain_command", required=True)
+    maintain_once = maintain_sub.add_parser("once", help="run one maintenance cycle and exit")
+    maintain_once.add_argument(
+        "--steps",
+        help="comma-separated steps (default: inbox_ingest,subscribe_poll,wiki_evolve,lint,index_rebuild,explore_gaps)",
+    )
+    maintain_once.add_argument("--max-inbox", type=int, dest="max_inbox", help="cap inbox files this cycle")
+    maintain_once.add_argument(
+        "--no-subscribe",
+        action="store_true",
+        help="skip YouTube subscription poll even if subscriptions exist",
+    )
+    maintain_once.add_argument(
+        "--no-propose-gaps",
+        action="store_true",
+        help="run explore gaps without writing update-queue proposals",
+    )
+    maintain_loop = maintain_sub.add_parser("loop", help="run maintain once on an interval (container worker)")
+    maintain_loop.add_argument(
+        "--interval",
+        type=float,
+        default=300.0,
+        help="seconds between cycles (default 300)",
+    )
+    maintain_loop.add_argument("--steps", help="comma-separated steps override")
+    maintain_loop.add_argument("--max-inbox", type=int, dest="max_inbox")
+    maintain_loop.add_argument("--max-cycles", type=int, dest="max_cycles", help="stop after N cycles (tests)")
+    maintain_loop.add_argument("--no-subscribe", action="store_true")
+    maintain_loop.add_argument("--no-propose-gaps", action="store_true")
+    maintain_sub.add_parser("status", help="show last maintainer run from system/jobs/")
 
     subparsers.add_parser("validate", help="validate canonical vault artifacts")
     subparsers.add_parser(
@@ -344,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report.valid else 1
     if args.command == "proposal":
         return _proposal_command(vault_root, args)
+    if args.command == "maintain":
+        return _maintain_command(vault_root, args)
     report = validate_vault(vault_root)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report.valid else 1
@@ -478,6 +522,48 @@ def _proposal_command(vault_root: Path, args: argparse.Namespace) -> int:
         result = reject_proposal(vault_root, args.path, reason=args.reason)
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status == "rejected" else 1
+    return 2
+
+
+def _maintain_command(vault_root: Path, args: argparse.Namespace) -> int:
+    try:
+        if args.maintain_command == "status":
+            print(json.dumps(maintain_last_run(vault_root), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        steps = parse_steps(args.steps) if getattr(args, "steps", None) else default_steps_from_env()
+        common = {
+            "steps": steps,
+            "max_inbox_files": getattr(args, "max_inbox", None),
+            "propose_gaps": not getattr(args, "no_propose_gaps", False),
+            "poll_subscriptions": not getattr(args, "no_subscribe", False),
+        }
+        if args.maintain_command == "once":
+            result = run_maintain_cycle(vault_root, **common)
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status in {"ok", "noop"} else 1
+        if args.maintain_command == "loop":
+            result = run_maintain_loop(
+                vault_root,
+                interval_seconds=args.interval,
+                max_cycles=args.max_cycles,
+                **common,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.status in {"ok", "noop", "partial"} else 1
+    except KnowledgeDeskError as exc:
+        print(
+            json.dumps(
+                {
+                    "operation": f"maintain.{getattr(args, 'maintain_command', '?')}",
+                    "success": False,
+                    "message": str(exc),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
     return 2
 
 

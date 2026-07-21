@@ -32,6 +32,8 @@ uv run knowledge-desk index rebuild
 uv run knowledge-desk search "keyword" --layer observation
 uv run knowledge-desk wiki evolve
 uv run knowledge-desk wiki refine-validate
+uv run knowledge-desk maintain once
+uv run knowledge-desk maintain status
 uv run knowledge-desk explore gaps
 uv run knowledge-desk explore ask "What does the source say about …?"
 uv run knowledge-desk mcp serve --transport stdio
@@ -40,11 +42,15 @@ uv run knowledge-desk lint
 uv run knowledge-desk proposal list
 ```
 
-### Docker MCP (read-only vault mount)
+### Docker MCP and maintainer
 
 ```bash
-docker compose up --build
+# Read-only MCP (default service)
+docker compose up --build mcp
 # MCP SSE on localhost:8000; bind-mounts this repo read-only at /vault
+
+# Unattended maintainer (read-write vault; inbox → wiki → lint → index)
+docker compose --profile maintainer up --build maintainer
 ```
 
 Supported bootstrap formats are PDF, Markdown (`.md`, `.markdown`), and UTF-8 plain text (`.txt`). `ingest` prints a JSON operation result suitable for scripts. Metadata can be supplied with `--title`, `--creator`, `--published`, `--url`, and `--language`. Originals are copied byte-for-byte under `sources/<source-id>/original/`; normalized Markdown and a manifest live beside them.
@@ -64,4 +70,4 @@ uv run --offline --no-sync knowledge-desk validate
 
 See [development](docs/development.md) before adding or upgrading a dependency. `pyproject.toml` is the human-maintained declaration; the committed `uv.lock` is the reproducible resolution and must change in the same review.
 
-Still deferred or partial: LLM-assisted observation extraction, full single-writer proposal application, OCR/STT when captions are missing, substantive domain packs, and containerized maintainers.
+Still deferred or partial: LLM-assisted observation extraction, OCR/STT when captions are missing, and substantive domain packs.
