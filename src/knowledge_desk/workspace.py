@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,12 +17,13 @@ from typing import Any
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.util import (
     SCHEMA_VERSION,
+    append_jsonl_synced,
     parse_frontmatter,
     render_frontmatter,
+    replace_json_synced,
     replace_text_synced,
     safe_filename,
     utc_now,
-    write_json_synced,
 )
 
 
@@ -388,9 +390,47 @@ def benchtest_workspace(
     source_id: str | None = None,
     persist: bool = True,
 ) -> dict[str, object]:
-    """Stress-test workspace claims against corpus. Does not mutate pages (optional report file)."""
+    """Stress-test claims; persisted reports run as one writer-locked workspace read/write."""
+    if not persist:
+        return _benchtest_workspace_unlocked(
+            vault_root,
+            workspace_id,
+            since=since,
+            source_id=source_id,
+            persist=False,
+        )
+
+    from knowledge_desk.writer import vault_write_lock
+
+    vault_root = vault_root.resolve()
+    try:
+        with vault_write_lock(vault_root):
+            return _benchtest_workspace_unlocked(
+                vault_root,
+                workspace_id,
+                since=since,
+                source_id=source_id,
+                persist=True,
+            )
+    except (OSError, ValueError, KnowledgeDeskError) as exc:
+        return {
+            "operation": "workspace.benchtest",
+            "status": "failed",
+            "workspace_id": workspace_id,
+            "message": str(exc),
+        }
+
+
+def _benchtest_workspace_unlocked(
+    vault_root: Path,
+    workspace_id: str,
+    *,
+    since: str | None,
+    source_id: str | None,
+    persist: bool,
+) -> dict[str, object]:
+    """Benchtest implementation; caller holds the writer lock when persist is true."""
     from knowledge_desk.observations import ObservationQuery, list_observations
-    from knowledge_desk.perspective import perspective_at
 
     vault_root = vault_root.resolve()
     root = workspace_path(vault_root, workspace_id)
@@ -449,9 +489,12 @@ def benchtest_workspace(
     if persist:
         bench_dir = root / "benchtests"
         bench_dir.mkdir(parents=True, exist_ok=True)
-        name = f"bench-{utc_now().replace(':', '').replace('-', '')}.json"
+        name = (
+            f"bench-{utc_now().replace(':', '').replace('-', '')}-"
+            f"{uuid.uuid4().hex[:8]}.json"
+        )
         out = bench_dir / name
-        write_json_synced(out, report)
+        replace_json_synced(out, report)
         report["report_path"] = out.relative_to(vault_root).as_posix()
         _append_changelog(
             root,
@@ -727,8 +770,7 @@ def _append_changelog(
         "reason": reason,
         "observation_ids": observation_ids,
     }
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    append_jsonl_synced(path, entry)
 
 
 def _read_changelog(root: Path) -> list[dict[str, Any]]:

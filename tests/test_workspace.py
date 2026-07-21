@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,7 +26,11 @@ from knowledge_desk.workspace import (
     workspaces_dir,
 )
 from knowledge_desk.proposals import apply_proposal
-from knowledge_desk.util import write_json_synced
+from knowledge_desk.util import (
+    append_jsonl_synced,
+    replace_json_synced,
+    write_json_synced,
+)
 from knowledge_desk.validation import validate_vault
 
 
@@ -183,6 +191,137 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual("failed", result.status)
         self.assertIn("simulated crash", result.message)
         self.assertEqual(before, spine.read_bytes())
+
+    def test_persisted_benchtest_uses_synced_report_and_changelog_helpers(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Durable workspace",
+            workspace_id="ws-durable",
+            statement="A durable stance.",
+        )
+
+        with patch(
+            "knowledge_desk.workspace.replace_json_synced",
+            wraps=replace_json_synced,
+        ) as report_write, patch(
+            "knowledge_desk.workspace.append_jsonl_synced",
+            wraps=append_jsonl_synced,
+        ) as changelog_append:
+            report = benchtest_workspace(self.vault, "ws-durable", persist=True)
+
+        self.assertEqual("ok", report["status"], report.get("message"))
+        report_write.assert_called_once()
+        changelog_append.assert_called_once()
+        self.assertTrue((self.vault / str(report["report_path"])).is_file())
+
+    def test_synced_jsonl_append_fsyncs_file_and_directory(self) -> None:
+        path = self.vault / "memory" / "append-sync-test.jsonl"
+        with patch("knowledge_desk.util.os.fsync", wraps=os.fsync) as fsync:
+            append_jsonl_synced(path, {"event": "test"})
+
+        self.assertGreaterEqual(fsync.call_count, 2)
+        self.assertEqual({"event": "test"}, json.loads(path.read_text(encoding="utf-8")))
+
+    def test_read_only_benchtest_does_not_take_writer_lock_or_mutate_workspace(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Read-only benchtest",
+            workspace_id="ws-read-only-benchtest",
+            statement="Do not persist this run.",
+        )
+        root = workspaces_dir(self.vault) / "ws-read-only-benchtest"
+        changelog = root / "log" / "changelog.jsonl"
+        before = changelog.read_bytes()
+
+        with patch(
+            "knowledge_desk.writer.vault_write_lock",
+            side_effect=AssertionError("read-only benchtest must not acquire writer lock"),
+        ):
+            report = benchtest_workspace(
+                self.vault,
+                "ws-read-only-benchtest",
+                persist=False,
+            )
+
+        self.assertEqual("ok", report["status"], report.get("message"))
+        self.assertEqual(before, changelog.read_bytes())
+        self.assertEqual([], list((root / "benchtests").glob("*.json")))
+
+    def test_persisted_benchtest_serializes_after_concurrent_refine(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Serialized workspace",
+            workspace_id="ws-serialized",
+            statement="Initial stance.",
+        )
+        child_code = """
+import sys
+from pathlib import Path
+from knowledge_desk.workspace import refine_workspace
+from knowledge_desk.writer import vault_write_lock
+
+vault = Path(sys.argv[1])
+with vault_write_lock(vault):
+    print("locked", flush=True)
+    sys.stdin.readline()
+    result = refine_workspace(vault, "ws-serialized", summary="child refine")
+    if result.status != "refined":
+        raise RuntimeError(result.message)
+"""
+        child = subprocess.Popen(
+            [sys.executable, "-c", child_code, str(self.vault)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.addCleanup(lambda: child.kill() if child.poll() is None else None)
+        self.assertEqual("locked", child.stdout.readline().strip() if child.stdout else "")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                benchtest_workspace,
+                self.vault,
+                "ws-serialized",
+                persist=True,
+            )
+            with self.assertRaises(concurrent.futures.TimeoutError):
+                future.result(timeout=0.1)
+            self.assertIsNotNone(child.stdin)
+            child.stdin.write("refine\n")
+            child.stdin.flush()
+            child.stdin.close()
+            child_result = child.wait(timeout=10)
+            child_error = child.stderr.read() if child.stderr else ""
+            if child.stdout:
+                child.stdout.close()
+            if child.stderr:
+                child.stderr.close()
+            self.assertEqual(0, child_result, child_error)
+            report = future.result(timeout=10)
+
+        self.assertEqual("ok", report["status"], report.get("message"))
+        events = [
+            item["event"]
+            for item in get_workspace(self.vault, "ws-serialized")["changelog_tail"]
+        ]
+        self.assertEqual(["created", "refined", "benchtest"], events)
+
+    def test_persisted_benchtests_never_overwrite_same_second_report(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Report identity",
+            workspace_id="ws-report-identity",
+        )
+        with patch("knowledge_desk.workspace.utc_now", return_value="2026-07-21T12:00:00Z"):
+            first = benchtest_workspace(self.vault, "ws-report-identity", persist=True)
+            second = benchtest_workspace(self.vault, "ws-report-identity", persist=True)
+
+        self.assertEqual("ok", first["status"])
+        self.assertEqual("ok", second["status"])
+        self.assertNotEqual(first["report_path"], second["report_path"])
+        self.assertTrue((self.vault / str(first["report_path"])).is_file())
+        self.assertTrue((self.vault / str(second["report_path"])).is_file())
 
     def test_validate_rejects_misnamed_workspace_spine_and_page(self) -> None:
         init_workspace(
