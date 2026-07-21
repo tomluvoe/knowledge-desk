@@ -531,13 +531,24 @@ def _assess_wiki_health(
             "matched_pages": matched,
             "reason": "matched wiki page(s) have no observation_ids",
         }
-    if citation_obs and overlap == 0 and citation_sources:
-        # Page has obs but not from this ask — still treat as thin for this question scope.
+    if citation_obs and overlap == 0:
+        # Page has obs but not from this ask — thin for this question scope.
         return {
             "status": "thin",
             "matched_pages": matched,
             "reason": "matched wiki page(s) do not link observations from this ask",
         }
+    # Source-only ask: require wiki evidence locators (or source summaries) to
+    # mention citation sources; otherwise treat as thin even if unrelated obs exist.
+    if citation_sources and not citation_obs:
+        wiki_by_source = _wiki_by_source(vault_root)
+        source_overlap = any(wiki_by_source.get(sid) for sid in citation_sources)
+        if not source_overlap:
+            return {
+                "status": "thin",
+                "matched_pages": matched,
+                "reason": "matched wiki page(s) do not cite sources from this ask",
+            }
     return {
         "status": "healthy",
         "matched_pages": matched,

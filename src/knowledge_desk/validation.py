@@ -272,9 +272,34 @@ def validate_vault(vault_root: Path) -> ValidationReport:
 
     memory_ids: set[str] = set()
     memory_records: list[tuple[Path, dict[str, Any]]] = []
+    workspace_ids: set[str] = set()
+    workspace_page_ids: set[str] = set()
+    checked.setdefault("memory_workspaces", 0)
     for path in sorted((vault_root / "memory").glob("**/*.md")):
         if path.name == "README.md":
             continue
+        rel = path.relative_to(vault_root).as_posix()
+        # User-owned multi-page workspaces use a different schema than atomic memory records.
+        if rel.startswith("memory/workspaces/"):
+            checked["memory_workspaces"] += 1
+            record = _validate_markdown_record(
+                vault_root, path, schemas.get("memory-workspace.schema.json"), errors
+            )
+            if not record:
+                continue
+            ws_id = record.get("workspace_id")
+            if isinstance(ws_id, str):
+                workspace_ids.add(ws_id)
+            page_id = record.get("page_id")
+            if isinstance(page_id, str):
+                if page_id in workspace_page_ids:
+                    errors.append(f"{rel}: duplicate workspace page_id {page_id}")
+                workspace_page_ids.add(page_id)
+            for observation_id in record.get("observation_ids", []) if isinstance(record.get("observation_ids"), list) else []:
+                if observation_id not in observation_ids:
+                    errors.append(f"{rel}: observation target does not exist: {observation_id}")
+            continue
+
         checked["memory_records"] += 1
         record = _validate_markdown_record(vault_root, path, schemas.get("memory-record.schema.json"), errors)
         if not record:

@@ -22,6 +22,7 @@ from knowledge_desk.workspace import (
 )
 from knowledge_desk.proposals import apply_proposal
 from knowledge_desk.util import write_json_synced
+from knowledge_desk.validation import validate_vault
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -140,6 +141,42 @@ class WorkspaceTests(unittest.TestCase):
         after = spine.read_text(encoding="utf-8")
         self.assertEqual(before, after)
         self.assertTrue(is_workspace_path(self.vault, spine))
+
+    def test_workspace_validates_with_vault_validate(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Validate me",
+            kind="thesis",
+            workspace_id="ws-thesis-validate",
+            statement="A working stance for validation.",
+            observation_ids=["obs-20260718-frog-calls"],
+        )
+        add_page(
+            self.vault,
+            "ws-thesis-validate",
+            title="Pillar",
+            page_kind="pillar",
+            observation_ids=["obs-20260718-frog-calls"],
+        )
+        report = validate_vault(self.vault)
+        self.assertTrue(report.valid, "\n".join(report.errors))
+
+    def test_workspace_refine_proposal_missing_fails(self) -> None:
+        queue = self.vault / "system" / "update-queue"
+        queue.mkdir(parents=True, exist_ok=True)
+        path = queue / "workspace-refine-missing.json"
+        write_json_synced(
+            path,
+            {
+                "kind": "workspace_refine_proposal",
+                "status": "pending",
+                "workspace_id": "ws-does-not-exist",
+                "summary": "nope",
+            },
+        )
+        result = apply_proposal(self.vault, path)
+        self.assertEqual("failed", result.status, result.message)
+        self.assertTrue(path.is_file(), "failed apply must not archive the proposal")
 
     def test_workspace_refine_proposal_apply(self) -> None:
         init_workspace(

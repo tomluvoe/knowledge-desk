@@ -83,7 +83,13 @@ def apply_proposal(vault_root: Path, proposal_path: Path) -> ProposalResult:
             elif kind == "workspace_refine_proposal":
                 from knowledge_desk.workspace import apply_workspace_refine_proposal
 
-                applied = {"workspace": apply_workspace_refine_proposal(vault_root, payload)}
+                workspace_result = apply_workspace_refine_proposal(vault_root, payload)
+                if workspace_result.get("status") != "refined":
+                    raise ValidationError(
+                        workspace_result.get("message")
+                        or f"workspace refine failed: {workspace_result.get('status')}"
+                    )
+                applied = {"workspace": workspace_result}
             elif kind == "compile_from_ask_proposal":
                 applied = _apply_compile_from_ask(vault_root, payload)
             else:
@@ -211,20 +217,39 @@ def _apply_compile_from_ask(vault_root: Path, payload: dict[str, Any]) -> dict[s
 
         subject = evolve_scope.get("subject") if isinstance(evolve_scope.get("subject"), str) else None
         topic = evolve_scope.get("topic") if isinstance(evolve_scope.get("topic"), str) else None
-        observation_ids = evolve_scope.get("observation_ids")
-        if not isinstance(observation_ids, list):
-            observation_ids = [
-                item.get("observation_id")
-                for item in applied_obs
-                if isinstance(item, dict) and isinstance(item.get("observation_id"), str)
-            ]
-            observation_ids = [i for i in observation_ids if i] or None
+        # Union proposal scope with successfully applied observation IDs so new
+        # compile stubs are never dropped when older citation IDs are listed.
+        scope_ids = {
+            i
+            for i in (evolve_scope.get("observation_ids") or [])
+            if isinstance(i, str)
+        }
+        applied_ids = {
+            item.get("observation_id")
+            for item in applied_obs
+            if isinstance(item, dict)
+            and item.get("status") in {"created", "noop"}
+            and isinstance(item.get("observation_id"), str)
+        }
+        observation_ids = sorted(scope_ids | applied_ids) or None
         evolve_result = _evolve_wiki_unlocked(
             vault_root,
             observation_ids=observation_ids,
-            subject=subject,
-            topic=topic,
+            subject=subject if not observation_ids else None,
+            topic=topic if not observation_ids else None,
         )
+        # If ID-scoped evolve was a noop but subject/topic exist, evolve full scope.
+        if (
+            evolve_result.status == "noop"
+            and (subject or topic)
+            and observation_ids
+        ):
+            evolve_result = _evolve_wiki_unlocked(
+                vault_root,
+                observation_ids=None,
+                subject=subject,
+                topic=topic,
+            )
         details["wiki_evolve"] = evolve_result.to_dict()
     else:
         details["wiki_evolve"] = {"status": "skipped", "message": "run_wiki_evolve=false"}
