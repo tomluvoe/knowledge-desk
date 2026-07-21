@@ -10,7 +10,12 @@ from typing import Any
 
 from knowledge_desk.errors import KnowledgeDeskError, ValidationError
 from knowledge_desk.util import write_json_synced
-from knowledge_desk.validation import load_schema, schema_errors, validate_locator
+from knowledge_desk.validation import (
+    load_schema,
+    reference_identity_errors,
+    schema_errors,
+    validate_locator,
+)
 
 
 @dataclass
@@ -43,6 +48,15 @@ def load_observation_document(path: Path) -> dict[str, Any]:
 def validate_observation_document(vault_root: Path, observation: dict[str, Any]) -> list[str]:
     """Return structural and evidence errors for a single observation payload."""
     errors = schema_errors(observation, load_schema(vault_root, "observation.schema.json"))
+    for field, expected_kind in (("subjects", "entity"), ("topics", "topic")):
+        references = observation.get(field)
+        if not isinstance(references, list):
+            continue
+        for index, reference in enumerate(references):
+            errors.extend(
+                f"{field}/{index}: {message}"
+                for message in reference_identity_errors(reference, expected_kind)
+            )
     if errors:
         return errors
     observation_id = observation.get("observation_id")

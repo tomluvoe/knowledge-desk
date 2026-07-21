@@ -148,6 +148,38 @@ class ValidationRegressionTests(unittest.TestCase):
         self.assertFalse(report.valid)
         self.assertTrue(any("duplicate observation ID" in error for error in report.errors))
 
+    def test_misnamed_observation_reports_canonical_flat_path(self) -> None:
+        result = self._ingest_text("note.txt", "misnamed observation\n")
+        observation = _base_observation("obs-20240101-canonical", [self._evidence_for(result)])
+        nested = self.vault / "observations" / "restored" / "wrong-name.json"
+        nested.parent.mkdir()
+        nested.write_text(json.dumps(observation) + "\n", encoding="utf-8")
+
+        report = validate_vault(self.vault)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any(
+                "must be stored at observations/obs-20240101-canonical.json" in error
+                for error in report.errors
+            )
+        )
+
+    def test_vault_rejects_reference_kind_and_prefix_mismatch(self) -> None:
+        result = self._ingest_text("note.txt", "bad reference\n")
+        observation = _base_observation(
+            "obs-20240101-bad-reference",
+            [self._evidence_for(result)],
+            subjects=[{"kind": "topic", "ref_id": "entity-subject", "label": "Subject"}],
+        )
+        self._write_observation(observation)
+
+        report = validate_vault(self.vault)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(any("kind must be 'entity'" in error for error in report.errors))
+        self.assertTrue(any("requires ref_id prefix topic-" in error for error in report.errors))
+
     def test_dangling_revision_of(self) -> None:
         result = self._ingest_text("note.txt", "revision target missing\n")
         manifest_path = self.vault / "sources" / str(result.source_id) / "manifest.json"

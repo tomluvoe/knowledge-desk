@@ -10,6 +10,10 @@ Every normalized representation is also SHA-256 anchored in the source manifest 
 
 Observations carry separate publication, expression, recording, validity, horizon, and freshness fields. Relations (`confirms`, `contradicts`, `refines`, `supersedes`) point to stable observation IDs. The generic orientation vocabulary is `supportive`, `critical`, `neutral`, `mixed`, `conditional`, or `unknown`; it makes no domain-specific claim.
 
+Reference identity is coupled: entity references use `kind: entity` with an `entity-…` ID, while topic references use `kind: topic` with a `topic-…` ID. Observation subjects are entities and observation topics are topics. Canonical observations use the flat path `observations/<observation_id>.json`; nested observation layouts are not supported.
+
 Core schemas reject unknown top-level fields. Domain-specific data goes in `extensions`, keyed by a registered dotted namespace such as `org.example.ecology`. A domain-pack manifest owns that namespace and lists its schemas. Namespacing prevents a first domain from hardening into the core model.
 
 Wiki notes are revisable interpretations and must cite observations and/or exact evidence. Memory records explicitly identify whether they are a user conclusion, decision, or open question. Templates under `system/templates/` are starting points, not evidence.
+
+Wiki identity is path-derived. Entity, topic, event, comparison, and synthesis records live under `wiki/entities/`, `wiki/topics/`, `wiki/events/`, `wiki/comparisons/`, and `wiki/syntheses/` respectively, using the filename/ID pairs emitted by `wiki evolve` (`wiki-entity-…` ↔ `entities/….md`, `wiki-topic-…` ↔ `topics/….md`, `wiki-event-…` ↔ `events/event-….md`, `wiki-comparison-…` ↔ `comparisons/compare-….md`, and synthesis/source-summary equivalents). Workspaces deliberately retain one nested layout: the spine is `memory/workspaces/<workspace_id>/workspace.md`; a page `wsp-<slug>` is `memory/workspaces/<workspace_id>/pages/<slug>.md`. Validation reports records whose embedded identity disagrees with these paths.

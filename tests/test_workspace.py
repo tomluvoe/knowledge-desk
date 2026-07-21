@@ -161,6 +161,40 @@ class WorkspaceTests(unittest.TestCase):
         report = validate_vault(self.vault)
         self.assertTrue(report.valid, "\n".join(report.errors))
 
+    def test_validate_rejects_misnamed_workspace_spine_and_page(self) -> None:
+        init_workspace(
+            self.vault,
+            title="Canonical workspace",
+            workspace_id="ws-canonical",
+        )
+        page = add_page(
+            self.vault,
+            "ws-canonical",
+            title="Canonical page",
+            page_kind="note",
+            page_id="wsp-canonical-page",
+        )
+        self.assertEqual("created", page.status, page.message)
+        root = workspaces_dir(self.vault) / "ws-canonical"
+        (root / "workspace.md").replace(root / "misnamed-spine.md")
+        (root / "pages" / "canonical-page.md").replace(root / "pages" / "wrong-page.md")
+
+        report = validate_vault(self.vault)
+
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any(
+                "must be stored at memory/workspaces/ws-canonical/workspace.md" in error
+                for error in report.errors
+            )
+        )
+        self.assertTrue(
+            any(
+                "must be stored at memory/workspaces/ws-canonical/pages/canonical-page.md" in error
+                for error in report.errors
+            )
+        )
+
     def test_workspace_refine_proposal_missing_fails(self) -> None:
         queue = self.vault / "system" / "update-queue"
         queue.mkdir(parents=True, exist_ok=True)

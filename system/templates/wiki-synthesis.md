@@ -1,6 +1,6 @@
 ---
 schema_version: "1.0.0"
-wiki_id: "wiki-<slug>"
+wiki_id: "wiki-synthesis-<slug>"
 kind: "synthesis"
 title: "<title>"
 created_at: "<RFC3339 timestamp>"
