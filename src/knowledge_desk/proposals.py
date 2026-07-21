@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from knowledge_desk.errors import KnowledgeDeskError, ValidationError
 from knowledge_desk.observe import _append_observation_unlocked
-from knowledge_desk.util import render_frontmatter, safe_filename, utc_now, write_text_synced
+from knowledge_desk.util import json_text, render_frontmatter, safe_filename, utc_now, write_text_synced
 from knowledge_desk.writer import vault_write_lock
 
 
@@ -65,7 +67,10 @@ def apply_proposal(vault_root: Path, proposal_path: Path) -> ProposalResult:
     result.path = str(path.relative_to(vault_root)) if path.is_relative_to(vault_root) else str(path)
     try:
         with vault_write_lock(vault_root):
+            path = _require_pending_proposal_path(vault_root, path)
+            result.path = path.relative_to(vault_root).as_posix()
             payload = _load_proposal(path)
+            _require_pending_status(payload)
             kind = payload.get("kind")
             applied: dict[str, object] = {}
             if kind == "explore_ask_proposal":
@@ -115,7 +120,10 @@ def reject_proposal(vault_root: Path, proposal_path: Path, *, reason: str | None
     result.path = str(path.relative_to(vault_root)) if path.is_relative_to(vault_root) else str(path)
     try:
         with vault_write_lock(vault_root):
+            path = _require_pending_proposal_path(vault_root, path)
+            result.path = path.relative_to(vault_root).as_posix()
             payload = _load_proposal(path)
+            _require_pending_status(payload)
             payload["status"] = "rejected"
             payload["rejected_at"] = utc_now()
             if reason:
@@ -142,14 +150,58 @@ def _load_proposal(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _require_pending_proposal_path(vault_root: Path, path: Path) -> Path:
+    """Return a direct pending queue entry, rejecting traversal and symlinks."""
+    vault_root = vault_root.resolve()
+    queue_path = vault_root / QUEUE_DIR
+    queue = queue_path.resolve()
+    if not queue.is_relative_to(vault_root) or queue != queue_path:
+        raise KnowledgeDeskError("proposal queue must be a real directory inside the vault")
+    if path.is_symlink():
+        raise KnowledgeDeskError("proposal path must not be a symlink")
+    resolved = path.resolve()
+    if resolved.parent != queue or resolved.suffix != ".json":
+        raise KnowledgeDeskError(
+            f"proposal must be a direct pending JSON file under {QUEUE_DIR}/"
+        )
+    return resolved
+
+
+def _require_pending_status(payload: dict[str, Any]) -> None:
+    status = payload.get("status")
+    if status not in {"pending", "proposed"}:
+        raise KnowledgeDeskError(
+            f"proposal status must be pending or proposed before apply/reject; got {status!r}"
+        )
+
+
 def _archive(vault_root: Path, path: Path, relative_dir: str, payload: dict[str, Any]) -> str:
     dest_dir = vault_root / relative_dir
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / path.name
-    dest.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if path.resolve() != dest.resolve() and path.is_file():
-        path.unlink()
+    dest = _available_archive_path(dest_dir, path.name)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".proposal-archive-", dir=dest_dir)
+    os.close(descriptor)
+    staged = Path(temporary_name)
+    try:
+        write_text_synced(staged, json_text(payload))
+        os.replace(staged, dest)
+    finally:
+        if staged.exists():
+            staged.unlink()
+    path.unlink()
     return dest.relative_to(vault_root).as_posix()
+
+
+def _available_archive_path(dest_dir: Path, filename: str) -> Path:
+    candidate = dest_dir / filename
+    if not candidate.exists() and not candidate.is_symlink():
+        return candidate
+    source = Path(filename)
+    for index in range(2, 10_000):
+        candidate = dest_dir / f"{source.stem}-{index}{source.suffix}"
+        if not candidate.exists() and not candidate.is_symlink():
+            return candidate
+    raise KnowledgeDeskError(f"cannot allocate collision-safe archive name for {filename}")
 
 
 def _apply_explore_ask(vault_root: Path, payload: dict[str, Any]) -> dict[str, object]:

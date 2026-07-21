@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from knowledge_desk.explore import explore_ask, explore_gaps
 from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path
@@ -74,6 +75,97 @@ class WriterAndProposalTests(unittest.TestCase):
         self.assertEqual("applied", applied.status, applied.message)
         memory_files = list((self.vault / "memory").glob("**/*.md"))
         self.assertTrue(any(path.name != "README.md" for path in memory_files))
+
+    def test_proposal_operations_reject_paths_outside_pending_queue(self) -> None:
+        external = self.vault.parent / "external-proposal.json"
+        external.write_text(
+            json.dumps({"kind": "explore_gaps_proposal", "status": "proposed"}),
+            encoding="utf-8",
+        )
+        rejected = reject_proposal(self.vault, external)
+        self.assertEqual("failed", rejected.status)
+        self.assertIn("direct pending JSON", rejected.message)
+        self.assertTrue(external.is_file())
+
+        traversal = Path("system/update-queue/../../../external-proposal.json")
+        applied = apply_proposal(self.vault, traversal)
+        self.assertEqual("failed", applied.status)
+        self.assertIn("direct pending JSON", applied.message)
+        self.assertTrue(external.is_file())
+
+    def test_proposal_operations_reject_archives_symlinks_and_nonpending_state(self) -> None:
+        queue = self.vault / "system" / "update-queue"
+        archived = queue / "applied" / "old.json"
+        archived.parent.mkdir(parents=True)
+        archived.write_text(
+            json.dumps({"kind": "explore_gaps_proposal", "status": "applied"}),
+            encoding="utf-8",
+        )
+        self.assertEqual("failed", reject_proposal(self.vault, archived).status)
+        self.assertTrue(archived.is_file())
+
+        nonpending = queue / "nonpending.json"
+        nonpending.write_text(
+            json.dumps({"kind": "explore_gaps_proposal", "status": "applied"}),
+            encoding="utf-8",
+        )
+        result = reject_proposal(self.vault, nonpending)
+        self.assertEqual("failed", result.status)
+        self.assertIn("status must be pending or proposed", result.message)
+        self.assertTrue(nonpending.is_file())
+
+        target = queue / "target.json"
+        target.write_text(
+            json.dumps({"kind": "explore_gaps_proposal", "status": "proposed"}),
+            encoding="utf-8",
+        )
+        link = queue / "link.json"
+        try:
+            link.symlink_to(target)
+        except (NotImplementedError, OSError):
+            self.skipTest("symlinks are unavailable on this platform")
+        symlink_result = reject_proposal(self.vault, link)
+        self.assertEqual("failed", symlink_result.status)
+        self.assertIn("must not be a symlink", symlink_result.message)
+        self.assertTrue(target.is_file())
+
+    def test_proposal_archive_collision_preserves_both_records(self) -> None:
+        queue = self.vault / "system" / "update-queue"
+        archive = queue / "rejected"
+        archive.mkdir(parents=True)
+        existing = archive / "proposal.json"
+        existing.write_text("existing audit record\n", encoding="utf-8")
+        pending = queue / "proposal.json"
+        pending.write_text(
+            json.dumps({"kind": "explore_gaps_proposal", "status": "proposed"}),
+            encoding="utf-8",
+        )
+
+        result = reject_proposal(self.vault, pending, reason="duplicate filename")
+
+        self.assertEqual("rejected", result.status, result.message)
+        self.assertEqual("existing audit record\n", existing.read_text(encoding="utf-8"))
+        collision_archive = archive / "proposal-2.json"
+        self.assertTrue(collision_archive.is_file())
+        self.assertFalse(pending.exists())
+        archived_payload = json.loads(collision_archive.read_text(encoding="utf-8"))
+        self.assertEqual("rejected", archived_payload["status"])
+
+    def test_proposal_remains_pending_when_archive_publication_fails(self) -> None:
+        queue = self.vault / "system" / "update-queue"
+        pending = queue / "proposal.json"
+        pending.write_text(
+            json.dumps({"kind": "explore_gaps_proposal", "status": "proposed"}),
+            encoding="utf-8",
+        )
+
+        with patch("knowledge_desk.proposals.os.replace", side_effect=OSError("simulated failure")):
+            result = reject_proposal(self.vault, pending)
+
+        self.assertEqual("failed", result.status)
+        self.assertIn("simulated failure", result.message)
+        self.assertTrue(pending.is_file())
+        self.assertFalse((queue / "rejected" / "proposal.json").exists())
 
 
 if __name__ == "__main__":
