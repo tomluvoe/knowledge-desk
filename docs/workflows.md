@@ -104,7 +104,15 @@ uv run knowledge-desk explore ask "Where were frog calls recorded?"
 uv run knowledge-desk explore ask "What is the capital of Mars?" --propose
 ```
 
-`explore gaps` lists sources missing observation and/or wiki coverage (anchors include `source_id`, path, linked observation/wiki ids when partial). `explore ask` answers **evidence-first** from source passages (and observations when indexed), with exact citations, or returns `insufficient_evidence` without inventing neutral/wiki consensus. `--propose` writes review-only JSON under `system/update-queue/`; it never publishes wiki, memory, or observations by itself.
+`explore gaps` lists sources missing observation and/or wiki coverage (anchors include `source_id`, path, linked observation/wiki ids when partial). `explore ask` answers **evidence-first** from source passages (and observations when indexed), with exact citations, or returns `insufficient_evidence` without inventing neutral/wiki consensus. Scope answers with filters:
+
+```bash
+uv run knowledge-desk explore ask "What is the view on rates?" \
+  --subject entity-jordi-visser \
+  --topic topic-rates
+```
+
+Filters AND with the query. If nothing matches **inside** the filter, the reason is `no_matches_in_filter` (out-of-scope sources are never used silently). Unfiltered ask remains available. Recipe: “What does XYZ say about ABC?” → bind XYZ as `entity-*` subject on observations, then `explore ask` / `perspective at` with `--subject` and `--topic`. `--propose` writes review-only JSON under `system/update-queue/`; it never publishes wiki, memory, or observations by itself.
 
 ## Wiki evolve and refine-validate
 

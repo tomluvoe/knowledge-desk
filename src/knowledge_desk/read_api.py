@@ -288,8 +288,24 @@ def explore_gaps_api(
     return payload
 
 
-def explore_ask_api(vault_root: Path, question: str, *, limit: int | None = 5) -> dict[str, Any]:
-    result = explore_ask(vault_root, question, limit=_bound_limit(limit, 5), propose=False)
+def explore_ask_api(
+    vault_root: Path,
+    question: str,
+    *,
+    limit: int | None = 5,
+    subject: str | None = None,
+    topic: str | None = None,
+    source_id: str | None = None,
+) -> dict[str, Any]:
+    result = explore_ask(
+        vault_root,
+        question,
+        limit=_bound_limit(limit, 5),
+        propose=False,
+        subject=subject,
+        topic=topic,
+        source_id=source_id,
+    )
     payload = result.to_dict()
     payload["api_version"] = API_VERSION
     payload["summary"] = result.message or result.status
