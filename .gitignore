@@ -33,6 +33,7 @@ system/.locks/
 /domains/
 /system/logs/
 /system/update-queue/
+/system/subscriptions/
 
 # Local backup archives
 /backups/

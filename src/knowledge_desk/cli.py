@@ -17,6 +17,7 @@ from knowledge_desk.observe import append_observation_path, successful as observ
 from knowledge_desk.observations import get_observation, list_observations_result, parse_observation_query
 from knowledge_desk.perspective import compare_perspectives, perspective_at, perspective_timeline
 from knowledge_desk.proposals import apply_proposal, list_proposals, reject_proposal
+from knowledge_desk.subscribe import add_subscription, list_subscriptions, poll_subscriptions
 from knowledge_desk.validation import validate_vault
 from knowledge_desk.wiki import evolve_wiki, refine_validate_wiki
 from knowledge_desk.youtube_transcript import (
@@ -136,6 +137,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="topic ref_id or label (repeat for multi-topic dimensions)",
     )
     perspective_compare_cmd.add_argument("--as-of", required=True, dest="as_of")
+
+    subscribe = subparsers.add_parser(
+        "subscribe",
+        help="YouTube channel/playlist subscriptions (poll new videos since a start date)",
+    )
+    subscribe_sub = subscribe.add_subparsers(dest="subscribe_command", required=True)
+    sub_add = subscribe_sub.add_parser("add", help="register a channel or playlist subscription")
+    sub_add.add_argument("--url", required=True, help="channel or playlist URL")
+    sub_add.add_argument("--since", required=True, help="only videos on/after this date (YYYY-MM-DD)")
+    sub_add.add_argument("--label", help="human label for the subscription")
+    sub_add.add_argument("--subject-ref", dest="subject_ref", help="default entity ref for delta briefings")
+    sub_add.add_argument("--topic-ref", dest="topic_ref", help="default topic ref for delta briefings")
+    sub_add.add_argument("--language", default="en", help="caption language preference (default en)")
+    subscribe_sub.add_parser("list", help="list local subscriptions")
+    sub_poll = subscribe_sub.add_parser(
+        "poll",
+        help="poll subscriptions for new videos, fetch transcripts, ingest, write delta briefings",
+    )
+    sub_poll.add_argument("--id", dest="subscription_id", help="poll only this subscription_id")
+    sub_poll.add_argument("--max-videos", type=int, default=10, dest="max_videos")
 
     fetch_transcript = subparsers.add_parser(
         "fetch-transcript",
@@ -303,6 +324,8 @@ def main(argv: list[str] | None = None) -> int:
         return _observations_command(vault_root, args)
     if args.command == "perspective":
         return _perspective_command(vault_root, args)
+    if args.command == "subscribe":
+        return _subscribe_command(vault_root, args)
     if args.command == "fetch-transcript":
         return _fetch_transcript_command(vault_root, args)
     if args.command == "index":
@@ -503,6 +526,44 @@ def _explore_command(vault_root: Path, args: argparse.Namespace) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status == "answered" else 2
+    return 2
+
+
+def _subscribe_command(vault_root: Path, args: argparse.Namespace) -> int:
+    try:
+        if args.subscribe_command == "add":
+            result = add_subscription(
+                vault_root,
+                args.url,
+                since=args.since,
+                label=args.label,
+                subject_ref=args.subject_ref,
+                topic_ref=args.topic_ref,
+                language=args.language,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.get("status") == "created" else 1
+        if args.subscribe_command == "list":
+            print(json.dumps(list_subscriptions(vault_root), ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        if args.subscribe_command == "poll":
+            result = poll_subscriptions(
+                vault_root,
+                subscription_id=args.subscription_id,
+                max_videos=args.max_videos,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if result.get("status") == "ok" else 1
+    except KnowledgeDeskError as exc:
+        print(
+            json.dumps(
+                {"operation": f"subscribe.{args.subscribe_command}", "success": False, "message": str(exc)},
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
     return 2
 
 
