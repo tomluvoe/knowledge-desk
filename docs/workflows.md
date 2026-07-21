@@ -63,7 +63,52 @@ uv run knowledge-desk subscribe poll
 uv run knowledge-desk subscribe poll --id sub-… --max-videos 5
 ```
 
-Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Scheduler is external: run `subscribe poll` on a cron, or wire it into the automated maintainer (#5). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
+Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Scheduler is external: run `subscribe poll` on a cron, or use the maintainer worker (`knowledge-desk maintain loop` / Compose `maintainer` profile). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
+
+## Maintainer worker (unattended)
+
+The maintainer is an **automated knowledge-desk agent**, not the interactive discuss/MCP surface. Manual CLI + MCP remain first-class without it.
+
+```bash
+# One maintenance cycle (local / cron)
+uv run knowledge-desk maintain once
+uv run knowledge-desk maintain once --steps inbox_ingest,wiki_evolve,lint --no-subscribe
+uv run knowledge-desk maintain status
+
+# Container loop (read-write vault mount)
+docker compose --profile maintainer up --build maintainer
+# or: KNOWLEDGE_DESK_MAINTAIN_INTERVAL=600 docker compose --profile maintainer up maintainer
+```
+
+Default steps (comma-separated via `--steps` or `KNOWLEDGE_DESK_MAINTAIN_STEPS`):
+
+1. `inbox_ingest` — non-recursive ingest of `inbox/` (skips `README.md` / dotfiles)
+2. `subscribe_poll` — YouTube poll when subscriptions exist
+3. `wiki_evolve` — living wiki compile from observations
+4. `lint` — vault + semantic lint (hard-fail only if vault invalid)
+5. `index_rebuild` — disposable FTS index
+6. `explore_gaps` — source-gap report; writes review-only proposals under `system/update-queue/`
+
+Job state is durable under local `system/jobs/` (`ledger.jsonl`, `last-run.json`, `dead-letter.jsonl`). Cycles are idempotent: re-ingesting the same inbox bytes is a no-op; wiki evolve retains prior `observation_ids`. Secrets (future LLM providers) are runtime env only—never stored in the vault. Content-changing LLM extraction is **not** enabled by default; proposals stay reviewable until `proposal apply`.
+
+## Living wiki compile
+
+```bash
+uv run knowledge-desk wiki evolve
+uv run knowledge-desk wiki refine-validate
+```
+
+`wiki evolve` is mechanical (no invented LLM prose). From observations it updates:
+
+| Kind | When |
+|------|------|
+| entity / topic | Always when subjects/topics are referenced |
+| synthesis (source summary) | Per source that has observations |
+| synthesis (cross-source) | Topic with evidence from ≥2 sources |
+| comparison | ≥2 entities on a topic with differing orientations or `contradicts` relations |
+| event | ≥2 observations sharing the same `valid_at` calendar day |
+
+Pages keep **source-specific positions**, separate **consensus / disagreement / uncertainty**, carry an **as_of** stamp (`extensions.knowledge.desk.wiki.as_of`), and a **What changed** section. Prior `observation_ids` are retained on re-evolve so regeneration does not silently drop reviewed links. Wiki prose remains revisable synthesis, not immutable evidence.
 
 ## Observe
 

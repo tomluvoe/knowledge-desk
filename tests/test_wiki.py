@@ -71,7 +71,11 @@ class WikiEvolveTests(unittest.TestCase):
     def test_evolve_creates_entity_and_topic_pages(self) -> None:
         result = evolve_wiki(self.vault)
         self.assertEqual("evolved", result.status, result.message)
-        self.assertEqual(2, len(result.pages))
+        # Entity + topic + source summary (single-source topic synthesis/comparison/event may skip)
+        kinds = {page["kind"] for page in result.pages}
+        self.assertIn("entity", kinds)
+        self.assertIn("topic", kinds)
+        self.assertIn("synthesis", kinds)
         entity = self.vault / "wiki" / "entities" / "example-wetland.md"
         topic = self.vault / "wiki" / "topics" / "amphibian-activity.md"
         self.assertTrue(entity.is_file())
@@ -80,6 +84,10 @@ class WikiEvolveTests(unittest.TestCase):
         self.assertIn("obs-20260718-frog-calls", entity_text)
         self.assertIn("Frog calls were recorded", entity_text)
         self.assertIn(self.ingested.source_id, entity_text)
+        self.assertIn("Source-specific positions", entity_text)
+        self.assertIn("Consensus", entity_text)
+        self.assertIn("What changed", entity_text)
+        self.assertIn("knowledge.desk.wiki", entity_text)
         report = validate_vault(self.vault)
         self.assertTrue(report.valid, "\n".join(report.errors))
 
@@ -88,6 +96,57 @@ class WikiEvolveTests(unittest.TestCase):
         # Idempotent content when observations unchanged.
         statuses = {page["status"] for page in again.pages}
         self.assertTrue(statuses <= {"unchanged", "updated", "created"})
+
+    def test_living_wiki_comparison_and_event_pages(self) -> None:
+        # Second observation: different entity, opposing orientation, same day + topic.
+        second = {
+            "schema_version": "1.0.0",
+            "observation_id": "obs-20260718-dry-bank",
+            "subjects": [{"kind": "entity", "label": "North bank", "ref_id": "entity-north-bank"}],
+            "topics": [{"kind": "topic", "label": "Amphibian activity", "ref_id": "topic-amphibian-activity"}],
+            "assertion": "North bank remained silent; no amphibian activity detected.",
+            "epistemic_class": "source_statement",
+            "statement_basis": "explicit_statement",
+            "orientation": "critical",
+            "confidence": 0.7,
+            "reasoning": "Direct count.",
+            "mechanisms": [],
+            "conditions": [],
+            "implications": [],
+            "catalysts": [],
+            "risks": [],
+            "publication_date": "2026-07-18",
+            "expressed_at": "2026-07-18T21:00:00Z",
+            "valid_at": "2026-07-18T21:00:00Z",
+            "recorded_at": "2026-07-20T10:06:00Z",
+            "horizon": None,
+            "freshness": {"as_of": "2026-07-18T21:00:00Z", "status": "historical"},
+            "evidence": [
+                {
+                    "source_id": self.ingested.source_id,
+                    "source_hash": self.ingested.content_hash,
+                    "normalized_path": self.ingested.normalized_path,
+                    "locator_kind": "line_range",
+                    "selector": {"start_line": 1, "end_line": 1},
+                }
+            ],
+            "relations": [
+                {"type": "contradicts", "observation_id": "obs-20260718-frog-calls"},
+            ],
+            "extensions": {},
+        }
+        self.assertEqual("created", append_observation(self.vault, second).status)
+        result = evolve_wiki(self.vault)
+        self.assertEqual("evolved", result.status, result.message)
+        kinds = {page["kind"] for page in result.pages}
+        self.assertIn("comparison", kinds)
+        self.assertIn("event", kinds)
+        compare = list((self.vault / "wiki" / "comparisons").glob("compare-*.md"))
+        self.assertTrue(compare)
+        event = list((self.vault / "wiki" / "events").glob("event-*.md"))
+        self.assertTrue(event)
+        report = validate_vault(self.vault)
+        self.assertTrue(report.valid, "\n".join(report.errors))
 
     def test_refine_validate_flags_unsupported_and_orphan_pages(self) -> None:
         evolve_wiki(self.vault)
