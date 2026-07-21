@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import shutil
+import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import knowledge_desk.index as index_module
 from knowledge_desk.index import index_path, rebuild_index, search_index
 from knowledge_desk.ingest import IngestMetadata, ingest_file
 from knowledge_desk.observe import append_observation
 from knowledge_desk.util import render_frontmatter, utc_now
+from knowledge_desk.workspace import init_workspace
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -118,8 +124,194 @@ class IndexTests(unittest.TestCase):
         self.assertTrue(any(hit["vault_id"] == "obs-20260718-frog-calls" for hit in obs_only.hits))
 
         by_subject = search_index(self.vault, "frog", subject="entity-example-wetland")
-        self.assertGreaterEqual(by_subject.count, 1)
+        self.assertGreaterEqual(by_subject.count, 3)
         self.assertTrue(all("entity-example-wetland" in hit["subjects"] for hit in by_subject.hits))
+
+        for layer in ("source", "observation", "wiki"):
+            with self.subTest(layer=layer):
+                filtered = search_index(
+                    self.vault,
+                    "frog",
+                    layer=layer,
+                    subject="entity-example-wetland",
+                    topic="topic-amphibian-activity",
+                )
+                self.assertGreaterEqual(filtered.count, 1, filtered.message)
+                self.assertTrue(
+                    all("obs-20260718-frog-calls" in hit["observation_ids"] for hit in filtered.hits)
+                )
+        wiki_hit = search_index(
+            self.vault,
+            "frog",
+            layer="wiki",
+            topic="topic-amphibian-activity",
+        ).hits[0]
+        self.assertEqual("topic", wiki_hit["subtype"])
+
+    def test_exact_facets_do_not_cross_match_similar_ids(self) -> None:
+        original_path = self.vault / "observations" / "obs-20260718-frog-calls.json"
+        similar = json.loads(original_path.read_text(encoding="utf-8"))
+        similar["observation_id"] = "obs-20260718-frog-calls-extended"
+        similar["subjects"] = [
+            {
+                "kind": "entity",
+                "label": "Extended wetland",
+                "ref_id": "entity-example-wetland-extended",
+            }
+        ]
+        similar["assertion"] = "Exactfacetuniquemarker appears only on the extended subject."
+        result = append_observation(self.vault, similar)
+        self.assertEqual("created", result.status, result.message)
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+
+        wrong = search_index(
+            self.vault,
+            "Exactfacetuniquemarker",
+            layer="observation",
+            subject="entity-example-wetland",
+        )
+        correct = search_index(
+            self.vault,
+            "Exactfacetuniquemarker",
+            layer="observation",
+            subject="entity-example-wetland-extended",
+        )
+
+        self.assertEqual(0, wrong.count)
+        self.assertEqual(1, correct.count)
+        self.assertEqual(similar["observation_id"], correct.hits[0]["vault_id"])
+
+    def test_workspace_subject_topic_facets_are_searchable(self) -> None:
+        created = init_workspace(
+            self.vault,
+            title="Wetland monitoring thesis",
+            workspace_id="ws-thesis-wetland-monitoring",
+            subject_refs=["entity-example-wetland"],
+            topic_refs=["topic-amphibian-activity"],
+            statement="Workspaceuniquemarker tracks frog evidence.",
+            observation_ids=["obs-20260718-frog-calls"],
+        )
+        self.assertEqual("created", created.status, created.message)
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+
+        result = search_index(
+            self.vault,
+            "Workspaceuniquemarker",
+            layer="memory",
+            subject="entity-example-wetland",
+            topic="topic-amphibian-activity",
+        )
+
+        self.assertEqual(1, result.count, result.message)
+        self.assertEqual("spine", result.hits[0]["subtype"])
+        self.assertIn("obs-20260718-frog-calls", result.hits[0]["observation_ids"])
+        self.assertTrue(result.hits[0]["path"].endswith("/workspace.md"))
+
+    def test_entity_and_topic_wiki_identity_create_direct_facets(self) -> None:
+        now = utc_now()
+        for kind, directory, slug, marker in (
+            ("entity", "entities", "standalone-wetland", "Standaloneentitymarker"),
+            ("topic", "topics", "standalone-habitat", "Standalonetopicmarker"),
+        ):
+            metadata = {
+                "schema_version": "1.0.0",
+                "wiki_id": f"wiki-{kind}-{slug}",
+                "kind": kind,
+                "title": slug.replace("-", " ").title(),
+                "created_at": now,
+                "updated_at": now,
+                "observation_ids": [],
+                "evidence": [],
+                "freshness": "unknown",
+                "extensions": {},
+            }
+            path = self.vault / "wiki" / directory / f"{slug}.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                render_frontmatter(metadata) + f"\n# {metadata['title']}\n\n{marker}.\n",
+                encoding="utf-8",
+            )
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+
+        entity = search_index(
+            self.vault,
+            "Standaloneentitymarker",
+            layer="wiki",
+            subject="entity-standalone-wetland",
+        )
+        topic = search_index(
+            self.vault,
+            "Standalonetopicmarker",
+            layer="wiki",
+            topic="topic-standalone-habitat",
+        )
+
+        self.assertEqual(1, entity.count)
+        self.assertEqual(["entity-standalone-wetland"], entity.hits[0]["subjects"])
+        self.assertEqual(1, topic.count)
+        self.assertEqual(["topic-standalone-habitat"], topic.hits[0]["topics"])
+
+    def test_live_index_is_replaced_only_after_staged_validation(self) -> None:
+        wiki_path = self.vault / "wiki" / "topics" / "amphibian-activity.md"
+        prior = wiki_path.read_text(encoding="utf-8") + "\nAtomicoldmarker.\n"
+        wiki_path.write_text(prior, encoding="utf-8")
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+        wiki_path.write_text(prior.replace("Atomicoldmarker", "Atomicnewmarker"), encoding="utf-8")
+        validation_started = threading.Event()
+        release_validation = threading.Event()
+        actual_validate = index_module._validate_index
+
+        def block_validation(connection: sqlite3.Connection, *, expected_documents: int) -> None:
+            actual_validate(connection, expected_documents=expected_documents)
+            validation_started.set()
+            if not release_validation.wait(timeout=10):
+                raise sqlite3.DatabaseError("timed out waiting to release staged validation")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            with patch("knowledge_desk.index._validate_index", side_effect=block_validation):
+                future = executor.submit(rebuild_index, self.vault)
+                self.assertTrue(validation_started.wait(timeout=10))
+                try:
+                    old_live = search_index(self.vault, "Atomicoldmarker", layer="wiki")
+                    new_not_live = search_index(self.vault, "Atomicnewmarker", layer="wiki")
+                    self.assertEqual(1, old_live.count)
+                    self.assertEqual(0, new_not_live.count)
+                finally:
+                    release_validation.set()
+                rebuilt = future.result(timeout=10)
+
+        self.assertEqual("rebuilt", rebuilt.status, rebuilt.message)
+        self.assertEqual(0, search_index(self.vault, "Atomicoldmarker", layer="wiki").count)
+        self.assertEqual(1, search_index(self.vault, "Atomicnewmarker", layer="wiki").count)
+        self.assertEqual(
+            [],
+            list((index_path(self.vault).parent / ".staging").glob("*.tmp")),
+        )
+
+    def test_failed_staged_rebuild_preserves_live_index(self) -> None:
+        wiki_path = self.vault / "wiki" / "topics" / "amphibian-activity.md"
+        wiki_path.write_text(
+            wiki_path.read_text(encoding="utf-8") + "\nPreservedlivemarker.\n",
+            encoding="utf-8",
+        )
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+        wiki_path.write_text(
+            wiki_path.read_text(encoding="utf-8").replace(
+                "Preservedlivemarker", "Failedreplacementmarker"
+            ),
+            encoding="utf-8",
+        )
+
+        with patch(
+            "knowledge_desk.index._validate_index",
+            side_effect=sqlite3.DatabaseError("injected staged validation failure"),
+        ):
+            failed = rebuild_index(self.vault)
+
+        self.assertEqual("failed", failed.status)
+        self.assertIn("injected staged validation failure", failed.message)
+        self.assertEqual(1, search_index(self.vault, "Preservedlivemarker", layer="wiki").count)
+        self.assertEqual(0, search_index(self.vault, "Failedreplacementmarker", layer="wiki").count)
 
     def test_missing_index_reports_rebuild_hint(self) -> None:
         result = search_index(self.vault, "frog")
