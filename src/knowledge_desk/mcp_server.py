@@ -154,10 +154,29 @@ def create_mcp_server(
 
     @server.tool(
         name="explore_ask",
-        description="Evidence-first Q&A from sources; returns insufficient_evidence when unsupported",
+        description=(
+            "Evidence-first Q&A from sources/observations. "
+            "For 'what does X say about Y', pass subject and topic filters. "
+            "Returns insufficient_evidence when unsupported inside the filter scope."
+        ),
     )
-    def explore_ask(question: str, limit: int = 5) -> str:
-        return _json(read_api.explore_ask_api(root, question, limit=limit))
+    def explore_ask(
+        question: str,
+        limit: int = 5,
+        subject: str | None = None,
+        topic: str | None = None,
+        source_id: str | None = None,
+    ) -> str:
+        return _json(
+            read_api.explore_ask_api(
+                root,
+                question,
+                limit=limit,
+                subject=subject,
+                topic=topic,
+                source_id=source_id,
+            )
+        )
 
     return server
 

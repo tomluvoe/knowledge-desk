@@ -60,6 +60,7 @@ class AskResult:
     question: str = ""
     answer: str | None = None
     reason: str = ""
+    filters: dict[str, str | None] = field(default_factory=dict)
     citations: list[dict[str, object]] = field(default_factory=list)
     layers_consulted: list[str] = field(default_factory=list)
     message: str = ""
@@ -158,13 +159,21 @@ def explore_ask(
     *,
     limit: int = 5,
     propose: bool = False,
+    subject: str | None = None,
+    topic: str | None = None,
+    source_id: str | None = None,
 ) -> AskResult:
     """Answer from sources (and observations) with citations, or explicit insufficiency.
 
+    Optional subject/topic/source_id filters AND with the query. Out-of-scope hits are
+    never used; empty scope yields insufficient_evidence with reason no_matches_in_filter.
     Does not invent wiki consensus. Prefer exact source passages; observations are secondary.
     """
     vault_root = vault_root.resolve()
-    result = AskResult(question=question)
+    result = AskResult(
+        question=question,
+        filters={"subject": subject, "topic": topic, "source_id": source_id},
+    )
     cleaned = " ".join(question.split())
     if not cleaned:
         result.status = "insufficient_evidence"
@@ -173,25 +182,80 @@ def explore_ask(
         return result
 
     terms = _query_terms(cleaned)
+    scope = _resolve_ask_scope(vault_root, subject=subject, topic=topic, source_id=source_id)
+    has_filter = any(v is not None and str(v).strip() for v in (subject, topic, source_id))
     citations: list[AskCitation] = []
     layers: list[str] = []
+    query_text = " OR ".join(terms) if terms else cleaned
 
     # Prefer disposable index when present; always fall back to direct scan.
     if index_path(vault_root).is_file():
         for layer in ("source", "observation"):
-            search = search_index(vault_root, " OR ".join(terms) if terms else cleaned, layer=layer, limit=limit)
+            search = search_index(
+                vault_root,
+                query_text,
+                layer=layer,
+                subject=subject,
+                topic=topic,
+                source_id=source_id,
+                limit=limit * 3,
+            )
             if search.message == "ok" and search.hits:
-                layers.append(layer)
-                for hit in search.hits[:limit]:
+                for hit in search.hits:
+                    if not _hit_in_scope(hit, scope, layer=layer, has_filter=has_filter):
+                        continue
                     citation = _citation_from_hit(vault_root, hit)
                     if citation:
                         citations.append(citation)
+                        if layer not in layers:
+                            layers.append(layer)
+                    if len(citations) >= limit:
+                        break
+            if len(citations) >= limit:
+                break
 
-    if not citations:
-        scanned = _scan_sources_for_terms(vault_root, terms, limit=limit)
+    if len(citations) < limit:
+        allowed_sources = scope.get("source_ids")
+        scanned = _scan_sources_for_terms(
+            vault_root,
+            terms,
+            limit=limit,
+            allowed_source_ids=allowed_sources if has_filter else None,
+        )
         if scanned:
-            layers.append("source")
+            if "source" not in layers:
+                layers.append("source")
             citations.extend(scanned)
+
+    # Observation-first scoped path when filters name subject/topic but FTS missed assertions.
+    if len(citations) < limit and has_filter and (subject or topic):
+        from knowledge_desk.observations import ObservationQuery, list_observations
+
+        for record in list_observations(
+            vault_root,
+            ObservationQuery(subject=subject, topic=topic, source_id=source_id),
+        ):
+            obs = record.observation
+            assertion = str(obs.get("assertion") or "")
+            lower = assertion.casefold()
+            if terms and not any(term.casefold() in lower for term in terms):
+                # Still allow if filters alone define scope and assertion is non-empty.
+                if not (subject or topic):
+                    continue
+            citation = AskCitation(
+                layer="observation",
+                vault_id=str(obs.get("observation_id") or ""),
+                path=record.path,
+                locator_kind="observation",
+                selector={"observation_id": str(obs.get("observation_id") or "")},
+                quote=assertion[:500],
+            )
+            if citation.vault_id and citation.quote:
+                citations.append(citation)
+                if "observation" not in layers:
+                    layers.append("observation")
+            if len(citations) >= limit:
+                break
 
     # Deduplicate by vault_id+quote
     unique: list[AskCitation] = []
@@ -208,9 +272,15 @@ def explore_ask(
 
     if not citations:
         result.status = "insufficient_evidence"
-        result.reason = "no_matching_source_passages"
+        result.reason = "no_matches_in_filter" if has_filter else "no_matching_source_passages"
         result.answer = None
-        result.message = "no source or observation passages matched the question terms"
+        if has_filter:
+            result.message = (
+                "no source or observation passages matched the question within the given "
+                f"filters (subject={subject!r}, topic={topic!r}, source_id={source_id!r})"
+            )
+        else:
+            result.message = "no source or observation passages matched the question terms"
         if propose:
             result.proposal_path = _write_open_question_proposal(
                 vault_root,
@@ -227,10 +297,11 @@ def explore_ask(
     quoted = " ".join(c.quote for c in primary[:3])
     result.status = "answered"
     result.reason = "source_passages_matched"
-    result.answer = (
-        "Evidence-first excerpts (not wiki consensus): "
-        + quoted
-    )
+    scope_note = ""
+    if has_filter:
+        bits = [f"{k}={v}" for k, v in result.filters.items() if v]
+        scope_note = f" (scoped to {', '.join(bits)})"
+    result.answer = "Evidence-first excerpts (not wiki consensus)" + scope_note + ": " + quoted
     result.message = f"{len(citations)} citation(s) from {', '.join(result.layers_consulted)}"
     if propose:
         result.proposal_path = _write_observation_stub_proposal(
@@ -240,6 +311,71 @@ def explore_ask(
         )
         result.message += f"; proposal at {result.proposal_path}"
     return result
+
+
+def _resolve_ask_scope(
+    vault_root: Path,
+    *,
+    subject: str | None,
+    topic: str | None,
+    source_id: str | None,
+) -> dict[str, Any]:
+    """Build allowed source_ids / observation_ids when filters are set."""
+    from knowledge_desk.observations import ObservationQuery, list_observations
+
+    if source_id and not subject and not topic:
+        return {"source_ids": {source_id}, "observation_ids": None}
+    if not subject and not topic and not source_id:
+        return {"source_ids": None, "observation_ids": None}
+
+    records = list_observations(
+        vault_root,
+        ObservationQuery(subject=subject, topic=topic, source_id=source_id),
+    )
+    source_ids: set[str] = set()
+    observation_ids: set[str] = set()
+    if source_id:
+        source_ids.add(source_id)
+    for record in records:
+        obs = record.observation
+        oid = obs.get("observation_id")
+        if isinstance(oid, str):
+            observation_ids.add(oid)
+        for locator in obs.get("evidence", []) if isinstance(obs.get("evidence"), list) else []:
+            if isinstance(locator, dict) and isinstance(locator.get("source_id"), str):
+                source_ids.add(locator["source_id"])
+    return {"source_ids": source_ids, "observation_ids": observation_ids}
+
+
+def _hit_in_scope(hit: dict[str, Any], scope: dict[str, Any], *, layer: str, has_filter: bool) -> bool:
+    if not has_filter:
+        return True
+    allowed_sources = scope.get("source_ids")
+    allowed_obs = scope.get("observation_ids")
+    if layer == "source":
+        if allowed_sources is None:
+            return True
+        vault_id = str(hit.get("vault_id") or "")
+        source_ids = hit.get("source_ids") or []
+        if vault_id in allowed_sources:
+            return True
+        return any(sid in allowed_sources for sid in source_ids)
+    if layer == "observation":
+        vault_id = str(hit.get("vault_id") or "")
+        if allowed_obs is not None and vault_id and vault_id not in allowed_obs:
+            # Still allow if subject/topic FTS fields already constrained the search.
+            subjects = " ".join(hit.get("subjects") or [])
+            topics = " ".join(hit.get("topics") or [])
+            # If observation_ids set is empty, nothing is in scope.
+            if not allowed_obs:
+                return False
+            return vault_id in allowed_obs
+        if allowed_sources is not None:
+            hit_sources = hit.get("source_ids") or []
+            if hit_sources and not any(sid in allowed_sources for sid in hit_sources):
+                return False
+        return True
+    return True
 
 
 def _load_sources(vault_root: Path) -> list[dict[str, Any]]:
@@ -357,26 +493,35 @@ def _query_terms(question: str) -> list[str]:
     return terms or [question.strip()]
 
 
-def _scan_sources_for_terms(vault_root: Path, terms: list[str], *, limit: int) -> list[AskCitation]:
+def _scan_sources_for_terms(
+    vault_root: Path,
+    terms: list[str],
+    *,
+    limit: int,
+    allowed_source_ids: set[str] | None = None,
+) -> list[AskCitation]:
     citations: list[AskCitation] = []
     terms_cf = [term.casefold() for term in terms]
     for item in _load_sources(vault_root):
+        if allowed_source_ids is not None and item["source_id"] not in allowed_source_ids:
+            continue
         body = item["body"]
         lines = [line for line in body.splitlines() if line.strip() and not line.startswith("<!--")]
         for index, line in enumerate(lines, start=1):
             lower = line.casefold()
-            if any(term in lower for term in terms_cf):
-                citations.append(
-                    AskCitation(
-                        layer="source",
-                        vault_id=item["source_id"],
-                        path=item["path"],
-                        locator_kind="line_range",
-                        selector={"start_line": index, "end_line": index},
-                        quote=line.strip()[:500],
-                    )
+            if terms_cf and not any(term in lower for term in terms_cf):
+                continue
+            citations.append(
+                AskCitation(
+                    layer="source",
+                    vault_id=item["source_id"],
+                    path=item["path"],
+                    locator_kind="line_range",
+                    selector={"start_line": index, "end_line": index},
+                    quote=line.strip()[:500],
                 )
-                break
+            )
+            break
         if len(citations) >= limit:
             break
     return citations

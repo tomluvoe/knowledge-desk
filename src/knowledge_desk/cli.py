@@ -221,6 +221,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     explore_ask_cmd.add_argument("question", help="natural-language question")
     explore_ask_cmd.add_argument("--limit", type=int, default=5, help="max citations (default 5)")
+    explore_ask_cmd.add_argument("--subject", help="restrict to subject ref_id or label (e.g. entity-…)")
+    explore_ask_cmd.add_argument("--topic", help="restrict to topic ref_id or label (e.g. topic-…)")
+    explore_ask_cmd.add_argument("--source-id", dest="source_id", help="restrict to one source_id")
     explore_ask_cmd.add_argument(
         "--propose",
         action="store_true",
@@ -494,6 +497,9 @@ def _explore_command(vault_root: Path, args: argparse.Namespace) -> int:
             args.question,
             limit=args.limit,
             propose=args.propose,
+            subject=args.subject,
+            topic=args.topic,
+            source_id=args.source_id,
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status == "answered" else 2

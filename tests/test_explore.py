@@ -139,6 +139,33 @@ class ExploreTests(unittest.TestCase):
         self.assertEqual([], list((self.vault / "observations").glob("**/*.json")))
         self.assertEqual([], [p for p in (self.vault / "wiki").glob("**/*.md") if p.name != "README.md"])
 
+    def test_ask_with_subject_topic_filters(self) -> None:
+        ingested = self._ingest_fixture()
+        self._observe(ingested)
+        hit = explore_ask(
+            self.vault,
+            "frog calls",
+            subject="entity-example-wetland",
+            topic="topic-amphibian-activity",
+        )
+        self.assertEqual("answered", hit.status, hit.message)
+        self.assertEqual("entity-example-wetland", hit.filters["subject"])
+
+        miss = explore_ask(
+            self.vault,
+            "frog calls",
+            subject="entity-someone-else",
+            topic="topic-amphibian-activity",
+        )
+        self.assertEqual("insufficient_evidence", miss.status)
+        self.assertEqual("no_matches_in_filter", miss.reason)
+
+        by_source = explore_ask(self.vault, "frog", source_id=ingested.source_id)
+        self.assertEqual("answered", by_source.status, by_source.message)
+        wrong_source = explore_ask(self.vault, "frog", source_id="src-" + ("f" * 24))
+        self.assertEqual("insufficient_evidence", wrong_source.status)
+        self.assertEqual("no_matches_in_filter", wrong_source.reason)
+
 
 if __name__ == "__main__":
     unittest.main()
