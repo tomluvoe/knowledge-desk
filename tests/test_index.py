@@ -181,6 +181,34 @@ class IndexTests(unittest.TestCase):
         self.assertEqual(1, correct.count)
         self.assertEqual(similar["observation_id"], correct.hits[0]["vault_id"])
 
+    def test_direct_source_catalog_associations_are_exact_search_facets(self) -> None:
+        source = self.vault / "direct-catalogue.txt"
+        source.write_text("Directsourcecatalogmarker belongs to a known series.\n", encoding="utf-8")
+        ingested = ingest_file(
+            self.vault,
+            source,
+            IngestMetadata(
+                subject_refs=["entity-jordi-visser"],
+                topic_refs=["topic-macro-nexus-podcast"],
+            ),
+        )
+        self.assertEqual("created", ingested.status, ingested.message)
+        self.assertEqual("rebuilt", rebuild_index(self.vault).status)
+
+        result = search_index(
+            self.vault,
+            "Directsourcecatalogmarker",
+            layer="source",
+            subject="entity-jordi-visser",
+            topic="topic-macro-nexus-podcast",
+        )
+
+        self.assertEqual(1, result.count, result.message)
+        self.assertEqual(ingested.source_id, result.hits[0]["vault_id"])
+        self.assertEqual(["entity-jordi-visser"], result.hits[0]["subjects"])
+        self.assertEqual(["topic-macro-nexus-podcast"], result.hits[0]["topics"])
+        self.assertEqual([], result.hits[0]["observation_ids"])
+
     def test_workspace_subject_topic_facets_are_searchable(self) -> None:
         created = init_workspace(
             self.vault,

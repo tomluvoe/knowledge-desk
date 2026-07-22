@@ -157,6 +157,8 @@ class SubscribeTests(unittest.TestCase):
         self.assertEqual("2026-06-01", newest["publication_date"])
         self.assertEqual("Even newer", newest["title"])
         self.assertEqual("Test playlist", newest["creator"])
+        self.assertEqual(["entity-test-speaker"], newest["subject_refs"])
+        self.assertEqual(["topic-markets"], newest["topic_refs"])
         self.assertEqual(
             "https://www.youtube.com/watch?v=ccccccccccc",
             newest["canonical_url"],

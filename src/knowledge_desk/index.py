@@ -397,7 +397,11 @@ def _index_sources(
                 body = normalized_content(note_body)
             except (OSError, UnicodeDecodeError, ValueError):
                 body = ""
-        source_links = associations.by_source.get(source_id, DocumentLinks())
+        source_links = DocumentLinks(
+            subjects=set(_string_values(manifest.get("subject_refs"))),
+            topics=set(_string_values(manifest.get("topic_refs"))),
+        )
+        source_links.merge(associations.by_source.get(source_id, DocumentLinks()))
         _insert(
             connection,
             vault_id=source_id,

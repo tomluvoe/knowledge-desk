@@ -31,6 +31,8 @@
   "revision_of": null,
   "schema_version": "1.0.0",
   "source_id": "src-aaaaaaaaaaaaaaaaaaaaaaaa",
+  "subject_refs": ["entity-example-research-group"],
   "title": "Wetland field note",
+  "topic_refs": ["topic-wetland-monitoring"],
   "warnings": []
 }

@@ -58,6 +58,41 @@ class IngestionTests(unittest.TestCase):
         }
         self.assertEqual([], validate_locator(self.vault, locator))
 
+    def test_source_catalog_associations_validate_and_reject_wrong_ref_kinds(self) -> None:
+        source = self.vault / "catalogued-interview.txt"
+        source.write_text("A catalogued interview with durable source associations.\n", encoding="utf-8")
+        result = ingest_file(
+            self.vault,
+            source,
+            IngestMetadata(
+                subject_refs=["entity-jordi-visser", "entity-jordi-visser"],
+                topic_refs=["topic-macro-nexus-podcast"],
+            ),
+        )
+
+        self.assertEqual("created", result.status, result.message)
+        source_dir = self.vault / "sources" / str(result.source_id)
+        manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+        note_metadata, _ = parse_frontmatter(
+            (source_dir / "normalized.md").read_text(encoding="utf-8")
+        )
+        self.assertEqual(["entity-jordi-visser"], manifest["subject_refs"])
+        self.assertEqual(["topic-macro-nexus-podcast"], manifest["topic_refs"])
+        self.assertEqual(manifest["subject_refs"], note_metadata["subject_refs"])
+        self.assertEqual(manifest["topic_refs"], note_metadata["topic_refs"])
+        self.assertTrue(validate_vault(self.vault).valid)
+
+        invalid = self.vault / "invalid-catalogue.txt"
+        invalid.write_text("This source has a topic incorrectly supplied as an entity.\n", encoding="utf-8")
+        rejected = ingest_file(
+            self.vault,
+            invalid,
+            IngestMetadata(subject_refs=["topic-not-an-entity"]),
+        )
+        self.assertEqual("failed", rejected.status)
+        self.assertIn("subject_refs", rejected.message)
+        self.assertFalse((self.vault / "sources" / str(rejected.source_id)).exists())
+
     def test_duplicate_ingestion_is_noop_and_does_not_append_log(self) -> None:
         source = self.vault / "interview.txt"
         source.write_bytes((FIXTURES / "interview.txt").read_bytes())

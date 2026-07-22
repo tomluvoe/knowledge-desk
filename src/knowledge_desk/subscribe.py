@@ -395,6 +395,8 @@ def _integrate_video(
         creator=subscription.label,
         publication_date=_publication_date(video.published),
         language=subscription.language,
+        subject_refs=[subscription.subject_ref] if subscription.subject_ref else [],
+        topic_refs=[subscription.topic_ref] if subscription.topic_ref else [],
         extensions={
             "org.knowledge-desk.youtube": {
                 "video_id": video.video_id,

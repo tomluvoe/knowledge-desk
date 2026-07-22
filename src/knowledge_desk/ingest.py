@@ -37,6 +37,8 @@ class IngestMetadata:
     publication_date: str | None = None
     canonical_url: str | None = None
     language: str | None = None
+    subject_refs: list[str] = field(default_factory=list)
+    topic_refs: list[str] = field(default_factory=list)
     extensions: dict[str, object] = field(default_factory=dict)
 
 
@@ -177,6 +179,8 @@ def _ingest_file_unlocked(
             "ingested_at": now,
             "canonical_url": metadata.canonical_url,
             "language": metadata.language,
+            "subject_refs": sorted(set(metadata.subject_refs)),
+            "topic_refs": sorted(set(metadata.topic_refs)),
             "extraction_status": extracted.extraction_status,
             "warnings": warnings,
             "revision_of": revision_of,
@@ -198,6 +202,8 @@ def _ingest_file_unlocked(
                 "ingested_at",
                 "canonical_url",
                 "language",
+                "subject_refs",
+                "topic_refs",
                 "extraction_status",
                 "warnings",
             )
@@ -418,10 +424,13 @@ def _normalized_note_metadata(manifest: dict[str, object]) -> dict[str, object]:
             "ingested_at",
             "canonical_url",
             "language",
-            "extraction_status",
-            "warnings",
         )
     }
+    for key in ("subject_refs", "topic_refs"):
+        if isinstance(manifest.get(key), list):
+            metadata[key] = manifest[key]
+    metadata["extraction_status"] = manifest["extraction_status"]
+    metadata["warnings"] = manifest["warnings"]
     if isinstance(manifest.get("page_count"), int):
         metadata["page_count"] = manifest["page_count"]
     return metadata

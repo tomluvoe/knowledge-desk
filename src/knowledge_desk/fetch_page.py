@@ -356,6 +356,8 @@ def fetch_and_ingest_page(
     title: str | None = None,
     creator: str | None = None,
     language: str | None = None,
+    subject_refs: list[str] | None = None,
+    topic_refs: list[str] | None = None,
     fetcher: PageFetcher | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     max_bytes: int = DEFAULT_MAX_BYTES,
@@ -380,6 +382,8 @@ def fetch_and_ingest_page(
         creator=creator,
         canonical_url=result.canonical_url or result.final_url or url,
         language=language,
+        subject_refs=list(subject_refs or []),
+        topic_refs=list(topic_refs or []),
     )
     runner = ingest_fn or ingest_path
     ingest_results = runner(vault_root, Path(result.output_path), metadata)
