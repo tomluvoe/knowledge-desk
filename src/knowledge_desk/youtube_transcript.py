@@ -225,7 +225,9 @@ def fetch_and_ingest_youtube_transcript(
     include_timestamps: bool = True,
     title: str | None = None,
     creator: str | None = None,
+    publication_date: str | None = None,
     language: str | None = None,
+    extensions: dict[str, object] | None = None,
     fetcher: TranscriptFetcher | None = None,
     ingest_fn: Callable[..., list] | None = None,
 ) -> FetchTranscriptResult:
@@ -246,8 +248,10 @@ def fetch_and_ingest_youtube_transcript(
     metadata = IngestMetadata(
         title=title or result.title,
         creator=creator,
+        publication_date=publication_date,
         canonical_url=result.canonical_url,
         language=language or result.language_code,
+        extensions=dict(extensions or {}),
     )
     runner = ingest_fn or ingest_path
     ingest_results = runner(vault_root, Path(result.output_path), metadata)

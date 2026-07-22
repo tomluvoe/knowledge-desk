@@ -393,7 +393,18 @@ def _integrate_video(
         languages=[subscription.language],
         title=video.title,
         creator=subscription.label,
+        publication_date=_publication_date(video.published),
         language=subscription.language,
+        extensions={
+            "org.knowledge-desk.youtube": {
+                "video_id": video.video_id,
+                "published_at": video.published or None,
+                "subscription_id": subscription.subscription_id,
+                "subscription_kind": subscription.kind,
+                "subscription_url": subscription.url,
+                "resolved_feed_id": subscription.resolved_id,
+            }
+        },
         fetcher=fetcher,
     )
     if ingest_result.status != "created" and not (ingest_result.ingest or {}).get("success"):
@@ -598,6 +609,15 @@ def _published_on_or_after(published: str, since: date) -> bool:
         return date.fromisoformat(published[:10]) >= since
     except ValueError:
         return True
+
+
+def _publication_date(published: str) -> str | None:
+    if not published:
+        return None
+    try:
+        return date.fromisoformat(published[:10]).isoformat()
+    except ValueError:
+        return None
 
 
 def _validate_since(since: str) -> None:

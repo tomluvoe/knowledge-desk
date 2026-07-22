@@ -37,6 +37,7 @@ class IngestMetadata:
     publication_date: str | None = None
     canonical_url: str | None = None
     language: str | None = None
+    extensions: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -179,7 +180,7 @@ def _ingest_file_unlocked(
             "extraction_status": extracted.extraction_status,
             "warnings": warnings,
             "revision_of": revision_of,
-            "extensions": {},
+            "extensions": dict(metadata.extensions),
         }
         if extracted.page_count is not None:
             manifest["page_count"] = extracted.page_count
