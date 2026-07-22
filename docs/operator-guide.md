@@ -90,9 +90,9 @@ uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest \
 1. **Source** — `sources/<src-…>/normalized.md` with page/block markers; manifest beside it.
 2. **Observation** — `observations/obs-….json` atomic claims with evidence locators.
 3. **Wiki** — revisable synthesis under `wiki/{entities,topics,events,comparisons,syntheses}/`.
-4. **Memory** — user conclusions, decisions, open questions under `memory/`.
+4. **Memory** — user conclusions, decisions, open questions under `memory/`, plus multi-page workspaces under `memory/workspaces/` (not auto-evolved by wiki).
 
-Query path: exact evidence → observations → wiki/memory. Cite the most direct layer.
+Query path: exact evidence → observations → wiki → memory/workspaces. Cite the most direct layer.
 
 ## CLI query surface
 
@@ -156,9 +156,19 @@ Review checklist:
 - Epistemic class and statement_basis are honest
 - Time fields (publication, expressed_at, valid_at, horizon, freshness) are coherent
 - No domain fields leaking into core schemas
-- Git diff is recoverable
+- High-impact local-data changes are recoverable (see below)
 
-High-impact wiki/memory/schema changes should land as Git commits (or PRs) you can revert.
+### Recoverable review for high-impact local data
+
+Product code and contracts use **Git**. Per-desk corpus data (`sources/`, `observations/`, `wiki/`, `memory/`, …) is **local and gitignored**—do not commit it to the product repository.
+
+For high-impact wiki, memory, observation, or bulk-source work on a desk:
+
+1. **Snapshot first:** `uv run knowledge-desk backup --out backups/pre-change-$(date +%Y%m%dT%H%M%S).tar.gz`
+2. Prefer **proposals** under `system/update-queue/` when an agent drafts the change; review, then `proposal apply` or `proposal reject` (archives preserve history under `applied/` / `rejected/`).
+3. For direct CLI edits (workspace refine, observe, wiki evolve), re-run `uv run knowledge-desk validate` (and `lint` when useful).
+4. **Recover** with `uv run knowledge-desk restore backups/pre-change-….tar.gz --force` (forced restore writes a pre-restore recovery archive first).
+5. Product schema/template/code changes still use ordinary Git branches and PRs.
 
 ## Rebuild indexes and recover
 
@@ -184,12 +194,12 @@ Canonical knowledge lives in `sources/`, `observations/`, `wiki/`, `memory/`, an
 
 See [architecture](architecture.md) and [artifact model](artifact-model.md).
 
-## Git strategy
+## Git strategy (product only)
 
-- **Commit**: Markdown/JSON sources, observations, wiki, memory, schemas, templates, docs, `pyproject.toml`, `uv.lock`.
-- **Ignore**: `.venv/`, `system/.staging/`, `system/.index/`, `__pycache__/`, secrets (see `.gitignore`).
-- **Large binaries**: prefer Git LFS or external object storage for large PDF/media sets if the repo grows; keep manifests and normalized Markdown in Git for reviewability.
-- **Branches/PRs**: use for multi-file wiki synthesis or schema changes; keep observation appends small and reviewable.
+- **Commit to the product repo**: code under `src/`, `docs/`, `system/schemas/`, `system/templates/`, `system/examples/`, tests, `pyproject.toml`, `uv.lock`, and related product files.
+- **Never commit by default**: per-desk corpus and ops data—`inbox/`, `sources/`, `observations/`, `wiki/`, `memory/`, `domains/`, `system/logs/`, `system/update-queue/`, `system/subscriptions/`, `system/jobs/`, plus disposable `system/.staging/`, `system/.index/`, `system/.locks/`, `.venv/`, and secrets (see `.gitignore` and [AGENTS.md](../AGENTS.md)).
+- **Branches/PRs**: use for product code, schema, and documentation changes. Corpus changes are reviewed on the desk (validate, proposal archives, backup/restore), not as product Git history.
+- **Optional external data repo**: if you want a separate private Git or object store for a large corpus, that is an opt-in design outside this product repository—not the default workflow, and not a reason to force-commit ignored vault paths here.
 
 ## Privacy, injection, and secrets
 
