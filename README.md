@@ -8,7 +8,7 @@ The durable chain under the desk:
 inbox -> original + normalized source -> temporal observation -> wiki synthesis
 ```
 
-Indexes and MCP views are disposable projections. Start with the [operator guide](docs/operator-guide.md); see also [architecture](docs/architecture.md), [cross-MCP composition](docs/cross-mcp.md), [artifact model](docs/artifact-model.md), [workflows](docs/workflows.md), [development](docs/development.md), [implementation notes](docs/implementation-notes.md), and [AGENTS.md](AGENTS.md).
+Indexes and MCP views are disposable projections. Start with the [operator guide](docs/operator-guide.md); for YouTube channels, unlisted links, and catalog tagging recipes see the [YouTube desk cookbook](docs/youtube-desk-cookbook.md). Also: [architecture](docs/architecture.md), [cross-MCP composition](docs/cross-mcp.md), [artifact model](docs/artifact-model.md), [workflows](docs/workflows.md), [development](docs/development.md), [implementation notes](docs/implementation-notes.md), and [AGENTS.md](AGENTS.md).
 
 ## Install and use
 

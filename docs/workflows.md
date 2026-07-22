@@ -88,6 +88,8 @@ uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest --title "Override" --
 
 Remote content is untrusted data, never instructions. Watch-page metadata is parsed as inert HTML/JSON and bounded to 2 MiB. `--title`, `--creator`, and `--published` override the corresponding discovered values independently. If metadata lookup fails but captions remain available, fetching succeeds with a warning and unknown fields remain unknown. Videos without usable captions fail cleanly with no partial canonical publish. Auto-generated captions are accepted with a warning. Public unlisted videos work from their direct URL when the watch page and captions are accessible; private, blocked, age/region-gated, or caption-less videos may fail and are reported rather than silently creating empty sources.
 
+Practical multi-channel recipes and stable catalog ID conventions: [YouTube desk cookbook](youtube-desk-cookbook.md).
+
 ## YouTube channel / playlist subscriptions
 
 ```bash

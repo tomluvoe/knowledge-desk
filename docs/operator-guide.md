@@ -86,6 +86,8 @@ uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest \
 
 `fetch-transcript` uses the network and normally gets title, channel, and publication date from YouTube's public watch page. Explicit flags override individual discovered fields. A direct public-unlisted URL is supported; it need not appear in search or a channel feed. Ordinary `ingest`/`validate` stay offline-capable and do not fetch metadata.
 
+End-to-end recipes (Forward Guidance / Jordi Visser IDs, subscriptions, unlisted batches, retag, MCP): [YouTube desk cookbook](youtube-desk-cookbook.md).
+
 ## Reading the layers
 
 1. **Source** — `sources/<src-…>/normalized.md` with page/block markers; manifest beside it.
