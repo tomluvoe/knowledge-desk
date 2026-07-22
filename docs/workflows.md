@@ -94,7 +94,7 @@ uv run knowledge-desk subscribe poll
 uv run knowledge-desk subscribe poll --id sub-… --max-videos 5
 ```
 
-Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Scheduler is external: run `subscribe poll` on a cron, or use the maintainer worker (`knowledge-desk maintain loop` / Compose `maintainer` profile). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
+Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Canonical source metadata preserves the feed title, subscription label as creator, publication date, watch URL, language, and namespaced YouTube video/subscription provenance. Scheduler is external: run `subscribe poll` on a cron, or use the maintainer worker (`knowledge-desk maintain loop` / Compose `maintainer` profile). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
 
 ## Maintainer worker (unattended)
 

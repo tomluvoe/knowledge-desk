@@ -145,6 +145,28 @@ class SubscribeTests(unittest.TestCase):
         self.assertIn("ccccccccccc", processed)
         self.assertNotIn("aaaaaaaaaaa", processed)
 
+        manifests = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((self.vault / "sources").glob("src-*/manifest.json"))
+        ]
+        by_video_id = {
+            manifest["extensions"]["org.knowledge-desk.youtube"]["video_id"]: manifest
+            for manifest in manifests
+        }
+        newest = by_video_id["ccccccccccc"]
+        self.assertEqual("2026-06-01", newest["publication_date"])
+        self.assertEqual("Even newer", newest["title"])
+        self.assertEqual("Test playlist", newest["creator"])
+        self.assertEqual(
+            "https://www.youtube.com/watch?v=ccccccccccc",
+            newest["canonical_url"],
+        )
+        provenance = newest["extensions"]["org.knowledge-desk.youtube"]
+        self.assertEqual(added["subscription"]["subscription_id"], provenance["subscription_id"])
+        self.assertEqual("youtube_playlist", provenance["subscription_kind"])
+        self.assertEqual("PLtestdata123", provenance["resolved_feed_id"])
+        self.assertEqual("2026-06-01T12:00:00+00:00", provenance["published_at"])
+
         briefings = list((self.vault / "wiki" / "syntheses").glob("*.md"))
         self.assertEqual(2, len(briefings))
         text = briefings[0].read_text(encoding="utf-8")
