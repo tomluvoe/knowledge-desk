@@ -166,6 +166,8 @@ class FetchPageTests(unittest.TestCase):
             self.vault,
             "https://example.com/article",
             title="Wetland Field Notes",
+            subject_refs=["entity-example-wetland"],
+            topic_refs=["topic-amphibian-activity"],
             fetcher=fetcher,
         )
         self.assertEqual("created", result.status, result.message)
@@ -174,6 +176,8 @@ class FetchPageTests(unittest.TestCase):
         self.assertEqual(1, len(sources))
         manifest = json.loads((sources[0] / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual("https://example.com/article", manifest.get("canonical_url"))
+        self.assertEqual(["entity-example-wetland"], manifest["subject_refs"])
+        self.assertEqual(["topic-amphibian-activity"], manifest["topic_refs"])
         report = validate_vault(self.vault)
         self.assertTrue(report.valid, "\n".join(report.errors))
 

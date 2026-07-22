@@ -12,6 +12,8 @@ Observations carry separate publication, expression, recording, validity, horizo
 
 Reference identity is coupled: entity references use `kind: entity` with an `entity-…` ID, while topic references use `kind: topic` with a `topic-…` ID. Observation subjects are entities and observation topics are topics. Canonical observations use the flat path `observations/<observation_id>.json`; nested observation layouts are not supported.
 
+Sources may carry optional `subject_refs` and `topic_refs` as explicit catalog associations. These refs make known people, organizations, series, and topics searchable even before claim extraction; they do not assert what the source says and never substitute for an evidence-backed observation.
+
 Core schemas reject unknown top-level fields. Domain-specific data goes in `extensions`, keyed by a registered dotted namespace such as `org.example.ecology`. A domain-pack manifest owns that namespace and lists its schemas. Namespacing prevents a first domain from hardening into the core model.
 
 Wiki notes are revisable interpretations and must cite observations and/or exact evidence. Memory records explicitly identify whether they are a user conclusion, decision, or open question. Templates under `system/templates/` are starting points, not evidence.

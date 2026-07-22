@@ -43,7 +43,7 @@ An interrupted subscription integration is retryable. The cursor advances only a
 
 ## Ingest
 
-Run `knowledge-desk ingest <file-or-directory>`. Directory ingestion is **non-recursive**, processes supported files in lexical order, **skips dotfiles**, and reports unsupported entries without corrupting successful records. Empty plain-text files still ingest but carry a warning. Supply known metadata explicitly; ingestion does not infer publication dates or creators from prose.
+Run `knowledge-desk ingest <file-or-directory>`. Directory ingestion is **non-recursive**, processes supported files in lexical order, **skips dotfiles**, and reports unsupported entries without corrupting successful records. Empty plain-text files still ingest but carry a warning. Supply known metadata explicitly; ingestion does not infer publication dates or creators from prose. Repeat `--subject-ref entity-…` and `--topic-ref topic-…` for known catalog associations; these are searchable metadata, not claims.
 
 The operation hashes first, checks duplicates, extracts in staging, preserves the original bytes, writes the manifest and normalized note, validates them, publishes atomically, and appends an ingest-log event. Exit status is nonzero if any requested input fails. JSON output makes no-op, created, revision, and failed states distinguishable.
 
@@ -94,7 +94,7 @@ uv run knowledge-desk subscribe poll
 uv run knowledge-desk subscribe poll --id sub-… --max-videos 5
 ```
 
-Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Canonical source metadata preserves the feed title, subscription label as creator, publication date, watch URL, language, and namespaced YouTube video/subscription provenance. Scheduler is external: run `subscribe poll` on a cron, or use the maintainer worker (`knowledge-desk maintain loop` / Compose `maintainer` profile). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
+Subscriptions live under local `system/subscriptions/` (gitignored). Poll discovers videos via YouTube Atom feeds, keeps only items **on/after `--since`** and not already processed (long playlists do not bulk-download history), fetches transcripts, ingests them, and writes a **delta briefing** under `wiki/syntheses/` (new video + perspective timeline notes for the bound subject/topic). Canonical source metadata preserves the feed title, subscription label as creator, publication date, watch URL, language, direct subject/topic catalog associations, and namespaced YouTube video/subscription provenance. Scheduler is external: run `subscribe poll` on a cron, or use the maintainer worker (`knowledge-desk maintain loop` / Compose `maintainer` profile). LLM claim extraction remains a follow-up; briefings point operators to append observations with relations.
 
 ## Maintainer worker (unattended)
 
@@ -306,7 +306,7 @@ Structured filters use exact relational facets, not substring matching. Each hit
 
 | Layer | Subtype | Structured associations |
 |---|---|---|
-| source | manifest `media_type` | source ID plus subjects, topics, and observations that cite the source |
+| source | manifest `media_type` | source ID plus direct catalog subject/topic refs and associations derived from observations that cite the source |
 | observation | `statement_basis` | direct subject/topic refs, cited sources, its own ID, and relation targets |
 | wiki | wiki `kind` | entity/topic identity plus linked observations and their subject/topic/source associations |
 | memory | memory `kind` or workspace `page_kind` | workspace subject/topic refs plus linked observations and evidence sources |

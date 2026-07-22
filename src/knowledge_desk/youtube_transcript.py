@@ -227,6 +227,8 @@ def fetch_and_ingest_youtube_transcript(
     creator: str | None = None,
     publication_date: str | None = None,
     language: str | None = None,
+    subject_refs: list[str] | None = None,
+    topic_refs: list[str] | None = None,
     extensions: dict[str, object] | None = None,
     fetcher: TranscriptFetcher | None = None,
     ingest_fn: Callable[..., list] | None = None,
@@ -251,6 +253,8 @@ def fetch_and_ingest_youtube_transcript(
         publication_date=publication_date,
         canonical_url=result.canonical_url,
         language=language or result.language_code,
+        subject_refs=list(subject_refs or []),
+        topic_refs=list(topic_refs or []),
         extensions=dict(extensions or {}),
     )
     runner = ingest_fn or ingest_path

@@ -87,6 +87,20 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--url", dest="canonical_url")
     ingest.add_argument("--language")
     ingest.add_argument(
+        "--subject-ref",
+        action="append",
+        dest="subject_refs",
+        default=[],
+        help="catalog entity ref for the source; repeatable",
+    )
+    ingest.add_argument(
+        "--topic-ref",
+        action="append",
+        dest="topic_refs",
+        default=[],
+        help="catalog topic ref for the source; repeatable",
+    )
+    ingest.add_argument(
         "--renormalize",
         action="store_true",
         help="explicitly create a normalization revision when adapter output changed",
@@ -199,6 +213,20 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_transcript.add_argument("--title", help="optional document title")
     fetch_transcript.add_argument("--creator", help="optional creator for ingest metadata")
     fetch_transcript.add_argument(
+        "--subject-ref",
+        action="append",
+        dest="subject_refs",
+        default=[],
+        help="catalog entity ref when using --ingest; repeatable",
+    )
+    fetch_transcript.add_argument(
+        "--topic-ref",
+        action="append",
+        dest="topic_refs",
+        default=[],
+        help="catalog topic ref when using --ingest; repeatable",
+    )
+    fetch_transcript.add_argument(
         "--no-timestamps",
         action="store_true",
         help="omit [mm:ss] prefixes from transcript lines",
@@ -222,6 +250,20 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_page_cmd.add_argument("--title", help="optional document title override")
     fetch_page_cmd.add_argument("--creator", help="optional creator for ingest metadata")
     fetch_page_cmd.add_argument("--language", help="optional language for ingest metadata")
+    fetch_page_cmd.add_argument(
+        "--subject-ref",
+        action="append",
+        dest="subject_refs",
+        default=[],
+        help="catalog entity ref when using --ingest; repeatable",
+    )
+    fetch_page_cmd.add_argument(
+        "--topic-ref",
+        action="append",
+        dest="topic_refs",
+        default=[],
+        help="catalog topic ref when using --ingest; repeatable",
+    )
     fetch_page_cmd.add_argument(
         "--timeout",
         type=float,
@@ -497,6 +539,8 @@ def main(argv: list[str] | None = None) -> int:
             publication_date=args.publication_date,
             canonical_url=args.canonical_url,
             language=args.language,
+            subject_refs=args.subject_refs,
+            topic_refs=args.topic_refs,
         )
         results = ingest_path(vault_root, args.path, metadata, renormalize=args.renormalize)
         payload = {
@@ -956,6 +1000,8 @@ def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int
             title=args.title,
             creator=args.creator,
             language=languages[0] if languages else None,
+            subject_refs=args.subject_refs,
+            topic_refs=args.topic_refs,
         )
     else:
         result = fetch_youtube_transcript(
@@ -983,6 +1029,8 @@ def _fetch_page_command(vault_root: Path, args: argparse.Namespace) -> int:
             title=args.title,
             creator=args.creator,
             language=args.language,
+            subject_refs=args.subject_refs,
+            topic_refs=args.topic_refs,
             timeout_seconds=args.timeout,
             max_bytes=args.max_bytes,
         )

@@ -123,6 +123,8 @@ class YouTubeTranscriptTests(unittest.TestCase):
             "dQw4w9WgXcQ",
             fetcher=fetcher,
             title="Sample talk",
+            subject_refs=["entity-sample-speaker"],
+            topic_refs=["topic-sample-talk"],
         )
         self.assertEqual("created", result.status, result.message)
         self.assertTrue((result.ingest or {}).get("success"))
@@ -135,6 +137,8 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertEqual("https://www.youtube.com/watch?v=dQw4w9WgXcQ", manifest["canonical_url"])
         self.assertEqual("Sample talk", manifest["title"])
         self.assertEqual("en", manifest["language"])
+        self.assertEqual(["entity-sample-speaker"], manifest["subject_refs"])
+        self.assertEqual(["topic-sample-talk"], manifest["topic_refs"])
 
     def test_missing_transcript_fails_without_publish(self) -> None:
         fetcher = FakeFetcher(error=KnowledgeDeskError("no captions"))
