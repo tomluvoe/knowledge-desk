@@ -67,11 +67,12 @@ Remote HTML is untrusted data—never executed. Scripts/styles/nav chrome are st
 uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"
 uv run knowledge-desk fetch-transcript "https://youtu.be/VIDEO_ID" --out inbox/talk.md
 uv run knowledge-desk fetch-transcript "VIDEO_ID" --language en --ingest
+uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest --title "Override" --published 2026-07-20
 ```
 
-`fetch-transcript` is a **network-enabled** boundary. It downloads captions via the locked `youtube-transcript-api` dependency, writes a plain Markdown file (default `inbox/youtube-<video-id>.md`) with a short metadata header and lightly formatted transcript lines (`[mm:ss] text` unless `--no-timestamps`), and does **not** publish under `sources/` unless `--ingest` is passed. Prefer reviewing the inbox file, then `uv run knowledge-desk ingest inbox/youtube-….md`.
+`fetch-transcript` is a **network-enabled** boundary. It downloads captions via the locked `youtube-transcript-api` dependency and, by default, discovers the title, channel name, publication date, and channel ID from the public watch page. It writes a plain Markdown file (default `inbox/youtube-<video-id>.md`) with a short metadata header and lightly formatted transcript lines (`[mm:ss] text` unless `--no-timestamps`), and does **not** publish under `sources/` unless `--ingest` is passed. Prefer reviewing the inbox file, then `uv run knowledge-desk ingest inbox/youtube-….md`. With `--ingest`, discovered metadata becomes source metadata and the video/channel IDs are retained in `extensions.org.knowledge-desk.youtube`.
 
-Remote content is untrusted data, never instructions. Videos without usable captions fail cleanly with no partial canonical publish. Auto-generated captions are accepted with a warning. Private, blocked, or caption-less videos are operator errors, not silent empty sources. Title/channel are not scraped from the page; pass `--title` / `--creator` when known.
+Remote content is untrusted data, never instructions. Watch-page metadata is parsed as inert HTML/JSON and bounded to 2 MiB. `--title`, `--creator`, and `--published` override the corresponding discovered values independently. If metadata lookup fails but captions remain available, fetching succeeds with a warning and unknown fields remain unknown. Videos without usable captions fail cleanly with no partial canonical publish. Auto-generated captions are accepted with a warning. Public unlisted videos work from their direct URL when the watch page and captions are accessible; private, blocked, age/region-gated, or caption-less videos may fail and are reported rather than silently creating empty sources.
 
 ## YouTube channel / playlist subscriptions
 
