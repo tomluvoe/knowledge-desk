@@ -76,10 +76,14 @@ uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID
 # review inbox/youtube-VIDEO_ID.md then:
 uv run knowledge-desk ingest inbox/youtube-VIDEO_ID.md
 # or one-shot:
-uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest --title "Talk"
+uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest
+# override only metadata that needs correction:
+uv run knowledge-desk fetch-transcript "VIDEO_ID" --ingest \
+  --title "Talk" --creator "Jordi Visser" --published 2026-07-20 \
+  --subject-ref entity-jordi-visser --topic-ref topic-macro-nexus
 ```
 
-`fetch-transcript` uses the network; ordinary `ingest`/`validate` stay offline-capable.
+`fetch-transcript` uses the network and normally gets title, channel, and publication date from YouTube's public watch page. Explicit flags override individual discovered fields. A direct public-unlisted URL is supported; it need not appear in search or a channel feed. Ordinary `ingest`/`validate` stay offline-capable and do not fetch metadata.
 
 ## Reading the layers
 

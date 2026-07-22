@@ -14,10 +14,12 @@ from knowledge_desk.validation import validate_vault
 from knowledge_desk.youtube_transcript import (
     TranscriptPayload,
     TranscriptSnippet,
+    YouTubeVideoMetadata,
     extract_youtube_video_id,
     fetch_and_ingest_youtube_transcript,
     fetch_youtube_transcript,
     format_timestamp,
+    parse_youtube_video_metadata,
     render_transcript_document,
 )
 
@@ -37,6 +39,24 @@ class FakeFetcher:
             raise self.error
         assert self.payload is not None
         return self.payload
+
+
+class FakeMetadataFetcher:
+    def __init__(
+        self,
+        metadata: YouTubeVideoMetadata | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.metadata = metadata
+        self.error = error
+        self.calls: list[str] = []
+
+    def fetch(self, video_id: str) -> YouTubeVideoMetadata:
+        self.calls.append(video_id)
+        if self.error:
+            raise self.error
+        assert self.metadata is not None
+        return self.metadata
 
 
 class YouTubeTranscriptTests(unittest.TestCase):
@@ -62,6 +82,16 @@ class YouTubeTranscriptTests(unittest.TestCase):
                 TranscriptSnippet(text="Hello from the talk.", start=1.5),
                 TranscriptSnippet(text="Second line of the transcript.", start=65.0),
             ),
+        )
+
+    def _metadata(self) -> YouTubeVideoMetadata:
+        return YouTubeVideoMetadata(
+            video_id="dQw4w9WgXcQ",
+            canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            title="Discovered talk",
+            creator="Example Channel",
+            publication_date="2026-07-20",
+            channel_id="UCexample123",
         )
 
     def test_extract_video_id_from_common_url_forms(self) -> None:
@@ -91,19 +121,25 @@ class YouTubeTranscriptTests(unittest.TestCase):
             canonical_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             payload=self._payload(generated=True),
             title="Sample talk",
+            creator="Example Channel",
+            publication_date="2026-07-20",
             include_timestamps=True,
         )
         self.assertIn("# Sample talk", document)
         self.assertIn("caption_kind: auto", document)
+        self.assertIn("creator: Example Channel", document)
+        self.assertIn("publication_date: 2026-07-20", document)
         self.assertIn("[00:01] Hello from the talk.", document)
         self.assertIn("[01:05] Second line of the transcript.", document)
 
     def test_fetch_writes_inbox_markdown_without_network(self) -> None:
         fetcher = FakeFetcher(self._payload(generated=True))
+        metadata_fetcher = FakeMetadataFetcher(self._metadata())
         result = fetch_youtube_transcript(
             self.vault,
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             fetcher=fetcher,
+            metadata_fetcher=metadata_fetcher,
             title="Sample talk",
         )
         self.assertEqual("created", result.status, result.message)
@@ -114,15 +150,38 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertEqual((self.vault / "inbox" / "youtube-dQw4w9WgXcQ.md").resolve(), path.resolve())
         text = path.read_text(encoding="utf-8")
         self.assertIn("Hello from the talk.", text)
+        self.assertIn("creator: Example Channel", text)
+        self.assertEqual("Sample talk", result.title)
+        self.assertEqual("Example Channel", result.creator)
+        self.assertEqual("2026-07-20", result.publication_date)
+        self.assertEqual(["dQw4w9WgXcQ"], metadata_fetcher.calls)
         self.assertEqual([("dQw4w9WgXcQ", ["en"])], fetcher.calls)
 
-    def test_fetch_and_ingest_publishes_source(self) -> None:
+    def test_parse_public_watch_page_metadata(self) -> None:
+        html = """
+        <html><head>
+          <script type="application/ld+json">
+            {"@context":"https://schema.org","@type":"VideoObject",
+             "name":"Public unlisted talk","uploadDate":"2026-07-19T10:20:30Z",
+             "author":{"@type":"Person","name":"Jordi Visser"}}
+          </script>
+          <script>var data = {"channelId":"UCjordi123"};</script>
+        </head></html>
+        """
+        metadata = parse_youtube_video_metadata(html, "dQw4w9WgXcQ")
+        self.assertEqual("Public unlisted talk", metadata.title)
+        self.assertEqual("Jordi Visser", metadata.creator)
+        self.assertEqual("2026-07-19", metadata.publication_date)
+        self.assertEqual("UCjordi123", metadata.channel_id)
+
+    def test_fetch_and_ingest_uses_discovered_metadata(self) -> None:
         fetcher = FakeFetcher(self._payload())
+        metadata_fetcher = FakeMetadataFetcher(self._metadata())
         result = fetch_and_ingest_youtube_transcript(
             self.vault,
             "dQw4w9WgXcQ",
             fetcher=fetcher,
-            title="Sample talk",
+            metadata_fetcher=metadata_fetcher,
             subject_refs=["entity-sample-speaker"],
             topic_refs=["topic-sample-talk"],
         )
@@ -135,14 +194,55 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertEqual(1, len(sources))
         manifest = json.loads((sources[0] / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual("https://www.youtube.com/watch?v=dQw4w9WgXcQ", manifest["canonical_url"])
-        self.assertEqual("Sample talk", manifest["title"])
+        self.assertEqual("Discovered talk", manifest["title"])
+        self.assertEqual("Example Channel", manifest["creator"])
+        self.assertEqual("2026-07-20", manifest["publication_date"])
         self.assertEqual("en", manifest["language"])
         self.assertEqual(["entity-sample-speaker"], manifest["subject_refs"])
         self.assertEqual(["topic-sample-talk"], manifest["topic_refs"])
+        self.assertEqual(
+            {"video_id": "dQw4w9WgXcQ", "channel_id": "UCexample123"},
+            manifest["extensions"]["org.knowledge-desk.youtube"],
+        )
+
+    def test_explicit_metadata_overrides_discovered_fields(self) -> None:
+        metadata_fetcher = FakeMetadataFetcher(self._metadata())
+        result = fetch_youtube_transcript(
+            self.vault,
+            "dQw4w9WgXcQ",
+            fetcher=FakeFetcher(self._payload()),
+            metadata_fetcher=metadata_fetcher,
+            title="Operator title",
+            creator="Operator creator",
+        )
+        self.assertEqual("created", result.status, result.message)
+        self.assertEqual("Operator title", result.title)
+        self.assertEqual("Operator creator", result.creator)
+        self.assertEqual("2026-07-20", result.publication_date)
+        self.assertEqual("UCexample123", result.channel_id)
+
+    def test_metadata_failure_is_nonfatal_when_captions_work(self) -> None:
+        result = fetch_youtube_transcript(
+            self.vault,
+            "dQw4w9WgXcQ",
+            fetcher=FakeFetcher(self._payload()),
+            metadata_fetcher=FakeMetadataFetcher(error=KnowledgeDeskError("watch page blocked")),
+        )
+        self.assertEqual("created", result.status, result.message)
+        self.assertEqual("YouTube transcript dQw4w9WgXcQ", result.title)
+        self.assertIsNone(result.creator)
+        self.assertIsNone(result.publication_date)
+        self.assertTrue(any("metadata unavailable" in warning for warning in result.warnings))
+        self.assertIn("with warnings", result.message)
 
     def test_missing_transcript_fails_without_publish(self) -> None:
         fetcher = FakeFetcher(error=KnowledgeDeskError("no captions"))
-        result = fetch_youtube_transcript(self.vault, "dQw4w9WgXcQ", fetcher=fetcher)
+        result = fetch_youtube_transcript(
+            self.vault,
+            "dQw4w9WgXcQ",
+            fetcher=fetcher,
+            metadata_fetcher=FakeMetadataFetcher(self._metadata()),
+        )
         self.assertEqual("failed", result.status)
         self.assertIn("no captions", result.message)
         self.assertFalse(list((self.vault / "inbox").glob("youtube-*")))

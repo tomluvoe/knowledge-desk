@@ -210,8 +210,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="languages",
         help="preferred caption language code; repeatable, descending priority (default: en)",
     )
-    fetch_transcript.add_argument("--title", help="optional document title")
-    fetch_transcript.add_argument("--creator", help="optional creator for ingest metadata")
+    fetch_transcript.add_argument("--title", help="override the video title discovered from YouTube")
+    fetch_transcript.add_argument("--creator", help="override the channel name discovered from YouTube")
+    fetch_transcript.add_argument(
+        "--published",
+        dest="publication_date",
+        help="override the publication date discovered from YouTube (YYYY-MM-DD)",
+    )
     fetch_transcript.add_argument(
         "--subject-ref",
         action="append",
@@ -999,6 +1004,7 @@ def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int
             include_timestamps=not args.no_timestamps,
             title=args.title,
             creator=args.creator,
+            publication_date=args.publication_date,
             language=languages[0] if languages else None,
             subject_refs=args.subject_refs,
             topic_refs=args.topic_refs,
@@ -1011,6 +1017,8 @@ def _fetch_transcript_command(vault_root: Path, args: argparse.Namespace) -> int
             languages=languages,
             include_timestamps=not args.no_timestamps,
             title=args.title,
+            creator=args.creator,
+            publication_date=args.publication_date,
         )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
     if result.status != "created":
