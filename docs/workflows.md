@@ -49,6 +49,20 @@ The operation hashes first, checks duplicates, extracts in staging, preserves th
 
 Normalized notes carry a manifest digest and adapter/version history. Ordinary re-ingestion of identical bytes remains a no-op. Run `knowledge-desk ingest <same-file> --renormalize` to explicitly append an immutable, auditable normalization revision and update the manifest's current pointer, even when the adapter output is byte-for-byte unchanged. Existing locator paths remain registered and resolvable. Older manifests without integrity history can be upgraded explicitly with the same command.
 
+### Retag catalog associations
+
+Identical transcript bytes cannot be re-ingested with different tags (`noop`). Correct or add catalog associations without touching the original:
+
+```bash
+uv run knowledge-desk source retag src-… \
+  --subject-ref entity-jordi-visser \
+  --topic-ref topic-macro-nexus
+uv run knowledge-desk source retag src-… --clear-subjects --topic-ref topic-forward-guidance
+uv run knowledge-desk index rebuild   # refresh FTS after retag
+```
+
+`--subject-ref` / `--topic-ref` **replace** that ref list when provided; omit a family to leave it unchanged; `--clear-subjects` / `--clear-topics` empty that list. Original bytes, `source_id`, and `content_hash` stay fixed. The current normalized front matter and its integrity hash are updated so manifest and note stay consistent. Associations remain searchable metadata, not claims.
+
 ## Fetch web pages
 
 ```bash

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from knowledge_desk.adapters.base import ExtractionResult
-from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path
+from knowledge_desk.ingest import IngestMetadata, ingest_file, ingest_path, retag_source
 from knowledge_desk.util import parse_frontmatter, sha256_text
 from knowledge_desk.validation import load_schema, schema_errors, validate_locator, validate_vault
 from pdf_fixture import write_pdf
@@ -92,6 +92,66 @@ class IngestionTests(unittest.TestCase):
         self.assertEqual("failed", rejected.status)
         self.assertIn("subject_refs", rejected.message)
         self.assertFalse((self.vault / "sources" / str(rejected.source_id)).exists())
+
+    def test_source_retag_updates_catalog_without_touching_original(self) -> None:
+        source = self.vault / "retag-me.txt"
+        source.write_text("Transcript body for retag tests.\n", encoding="utf-8")
+        created = ingest_file(
+            self.vault,
+            source,
+            IngestMetadata(subject_refs=["entity-old-name"], topic_refs=["topic-old-show"]),
+        )
+        self.assertEqual("created", created.status, created.message)
+        source_dir = self.vault / "sources" / str(created.source_id)
+        original_bytes = (source_dir / "original" / "retag-me.txt").read_bytes()
+        prior_hash = created.content_hash
+
+        updated = retag_source(
+            self.vault,
+            str(created.source_id),
+            subject_refs=["entity-jordi-visser"],
+            topic_refs=["topic-macro-nexus", "topic-forward-guidance"],
+        )
+        self.assertEqual("updated", updated.status, updated.message)
+        manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+        note_metadata, body = parse_frontmatter((source_dir / "normalized.md").read_text(encoding="utf-8"))
+        self.assertEqual(original_bytes, (source_dir / "original" / "retag-me.txt").read_bytes())
+        self.assertEqual(prior_hash, manifest["content_hash"])
+        self.assertEqual(["entity-jordi-visser"], manifest["subject_refs"])
+        self.assertEqual(["topic-forward-guidance", "topic-macro-nexus"], manifest["topic_refs"])
+        self.assertEqual(manifest["subject_refs"], note_metadata["subject_refs"])
+        self.assertEqual(manifest["topic_refs"], note_metadata["topic_refs"])
+        self.assertIn("Transcript body for retag tests.", body)
+        history = manifest["normalization"]
+        current = history["current_revision"]
+        current_entry = next(item for item in history["revisions"] if item["revision_id"] == current)
+        self.assertEqual(manifest["normalized_hash"], current_entry["normalized_hash"])
+        self.assertTrue(validate_vault(self.vault).valid)
+
+        noop = retag_source(
+            self.vault,
+            str(created.source_id),
+            subject_refs=["entity-jordi-visser"],
+            topic_refs=["topic-macro-nexus", "topic-forward-guidance"],
+        )
+        self.assertEqual("noop", noop.status)
+
+        cleared = retag_source(self.vault, str(created.source_id), clear_subjects=True, clear_topics=True)
+        self.assertEqual("updated", cleared.status, cleared.message)
+        cleared_manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual([], cleared_manifest["subject_refs"])
+        self.assertEqual([], cleared_manifest["topic_refs"])
+
+        invalid = retag_source(
+            self.vault,
+            str(created.source_id),
+            subject_refs=["topic-not-an-entity"],
+        )
+        self.assertEqual("failed", invalid.status)
+        self.assertIn("subject_refs", invalid.message)
+        # Failed retag must not leave partial catalog state.
+        still = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual([], still["subject_refs"])
 
     def test_duplicate_ingestion_is_noop_and_does_not_append_log(self) -> None:
         source = self.vault / "interview.txt"
