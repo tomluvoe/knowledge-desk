@@ -20,6 +20,7 @@ uv sync --locked
 uv run knowledge-desk init   # local data dirs (gitignored)
 uv run knowledge-desk ingest path/to/source.pdf
 uv run knowledge-desk ingest inbox/
+uv run knowledge-desk source retag src-… --subject-ref entity-example --topic-ref topic-example
 uv run knowledge-desk backup --out backups/desk.tar.gz
 
 uv run knowledge-desk fetch-transcript "https://www.youtube.com/watch?v=VIDEO_ID"

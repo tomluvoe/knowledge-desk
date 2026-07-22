@@ -68,6 +68,7 @@ uv run knowledge-desk ingest inbox/          # directory: top-level files only
 - Supported: `.pdf`, `.md`/`.markdown`, `.txt` (strict UTF-8).
 - Supply `--title`, `--creator`, `--published`, `--url`, `--language` when known; the tool does not invent them from prose.
 - Duplicates (same bytes) return `noop`. Same filename with new bytes becomes a `revision` linked via `revision_of`.
+- To fix catalog tags without re-ingest: `uv run knowledge-desk source retag src-… --subject-ref entity-… --topic-ref topic-…` then `index rebuild`.
 
 ### YouTube transcripts
 

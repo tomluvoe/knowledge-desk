@@ -555,5 +555,173 @@ def _append_ingest_log(vault_root: Path, entry: dict[str, object]) -> None:
         os.close(descriptor)
 
 
+def retag_source(
+    vault_root: Path,
+    source_id: str,
+    *,
+    subject_refs: list[str] | None = None,
+    topic_refs: list[str] | None = None,
+    clear_subjects: bool = False,
+    clear_topics: bool = False,
+) -> OperationResult:
+    """Update catalog associations on an existing source without re-ingesting bytes.
+
+    Immutable original content and source_id stay fixed. Only subject_refs /
+    topic_refs (and the matching normalized front matter + hash) change.
+    """
+    from knowledge_desk.writer import vault_write_lock
+
+    with vault_write_lock(vault_root):
+        return _retag_source_unlocked(
+            vault_root,
+            source_id,
+            subject_refs=subject_refs,
+            topic_refs=topic_refs,
+            clear_subjects=clear_subjects,
+            clear_topics=clear_topics,
+        )
+
+
+def _retag_source_unlocked(
+    vault_root: Path,
+    source_id: str,
+    *,
+    subject_refs: list[str] | None,
+    topic_refs: list[str] | None,
+    clear_subjects: bool,
+    clear_topics: bool,
+) -> OperationResult:
+    vault_root = vault_root.resolve()
+    result = OperationResult(operation="source-retag", input_path=source_id, source_id=source_id)
+    try:
+        if clear_subjects and subject_refs:
+            raise ValidationError("use either --clear-subjects or --subject-ref, not both")
+        if clear_topics and topic_refs:
+            raise ValidationError("use either --clear-topics or --topic-ref, not both")
+        if not clear_subjects and subject_refs is None and not clear_topics and topic_refs is None:
+            raise ValidationError(
+                "provide --subject-ref / --clear-subjects and/or --topic-ref / --clear-topics"
+            )
+
+        source_dir = vault_root / "sources" / source_id
+        if not source_dir.is_dir():
+            raise ValidationError(f"unknown source_id: {source_id}")
+        manifest_path = source_dir / "manifest.json"
+        resolved_manifest = confined_file(source_dir, manifest_path)
+        if resolved_manifest is None or not resolved_manifest.is_file():
+            raise ValidationError(f"missing or unreadable manifest for {source_id}")
+        manifest = json.loads(resolved_manifest.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise ValidationError(f"manifest for {source_id} is not an object")
+        if manifest.get("source_id") != source_id:
+            raise ValidationError(f"manifest source_id mismatch for {source_id}")
+
+        current_subjects = _catalog_ref_list(manifest.get("subject_refs"))
+        current_topics = _catalog_ref_list(manifest.get("topic_refs"))
+        if clear_subjects:
+            next_subjects = []
+        elif subject_refs is not None:
+            next_subjects = sorted(set(subject_refs))
+        else:
+            next_subjects = current_subjects
+        if clear_topics:
+            next_topics = []
+        elif topic_refs is not None:
+            next_topics = sorted(set(topic_refs))
+        else:
+            next_topics = current_topics
+
+        result.content_hash = str(manifest.get("content_hash") or "") or None
+        result.manifest_path = manifest_path.relative_to(vault_root).as_posix()
+        result.normalized_path = str(manifest.get("normalized_path") or "") or None
+        result.extraction_status = str(manifest.get("extraction_status") or "") or None
+        result.warnings = list(manifest.get("warnings") or []) if isinstance(manifest.get("warnings"), list) else []
+
+        if next_subjects == current_subjects and next_topics == current_topics:
+            result.status = "noop"
+            result.message = "catalog associations already match requested values"
+            return result
+
+        working = dict(manifest)
+        working["subject_refs"] = next_subjects
+        working["topic_refs"] = next_topics
+
+        normalized_rel = str(working.get("normalized_path") or "")
+        if not normalized_rel.startswith(f"sources/{source_id}/"):
+            raise ValidationError("normalized_path is outside its source")
+        note_path = confined_file(source_dir, vault_root / normalized_rel)
+        if note_path is None or not note_path.is_file():
+            raise ValidationError("current normalized note is missing or outside its source")
+        prior_note = note_path.read_text(encoding="utf-8")
+        _, body = parse_frontmatter(prior_note)
+        note_metadata = _normalized_note_metadata(working)
+        # parse_frontmatter returns the body after the closing --- line (may start with \n).
+        if body.startswith("\n") or body == "":
+            normalized_note = render_frontmatter(note_metadata) + body
+        else:
+            normalized_note = render_frontmatter(note_metadata) + "\n" + body
+        normalized_hash = f"sha256:{sha256_text(normalized_note)}"
+        working["normalized_hash"] = normalized_hash
+        history = working.get("normalization")
+        if isinstance(history, dict) and isinstance(history.get("revisions"), list):
+            current_revision = history.get("current_revision")
+            revisions = []
+            for item in history["revisions"]:
+                if not isinstance(item, dict):
+                    revisions.append(item)
+                    continue
+                entry = dict(item)
+                # Keep integrity anchors for the published current path in sync with the note.
+                if entry.get("normalized_path") == normalized_rel:
+                    entry["normalized_hash"] = normalized_hash
+                revisions.append(entry)
+            working["normalization"] = {
+                "current_revision": current_revision,
+                "revisions": revisions,
+            }
+
+        _validate_normalization_update(vault_root, working, normalized_note)
+
+        original_rel = str(working.get("original_path") or "")
+        if original_rel:
+            original_path = confined_file(source_dir, vault_root / original_rel)
+            if original_path is not None and original_path.is_file() and working.get("content_hash"):
+                actual = f"sha256:{sha256_file(original_path)}"
+                if actual != working["content_hash"]:
+                    raise ValidationError("original content hash mismatch; refusing retag")
+
+        published_note = False
+        try:
+            _replace_text_synced(note_path, normalized_note)
+            published_note = True
+            _replace_json_synced(manifest_path, working)
+        except Exception:
+            if published_note:
+                _replace_text_synced(note_path, prior_note)
+            raise
+
+        result.status = "updated"
+        result.normalized_path = normalized_rel
+        result.message = (
+            f"updated catalog associations "
+            f"(subjects={next_subjects or '[]'}, topics={next_topics or '[]'}); "
+            "rebuild the search index to refresh FTS"
+        )
+        return result
+    except (KnowledgeDeskError, ValidationError, OSError, json.JSONDecodeError, ValueError) as exc:
+        result.status = "failed"
+        result.message = str(exc)
+        return result
+
+
+def _catalog_ref_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return sorted({str(item) for item in value if isinstance(item, str)})
+
+
 def successful(results: Iterable[OperationResult]) -> bool:
-    return all(result.status in {"created", "revision", "normalization_revision", "noop"} for result in results)
+    return all(
+        result.status in {"created", "revision", "normalization_revision", "updated", "noop"}
+        for result in results
+    )

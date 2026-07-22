@@ -9,7 +9,12 @@ from knowledge_desk.backup import backup_vault, restore_vault
 from knowledge_desk.errors import KnowledgeDeskError
 from knowledge_desk.explore import compile_from_ask, explore_ask, explore_gaps
 from knowledge_desk.index import rebuild_index, search_index
-from knowledge_desk.ingest import IngestMetadata, ingest_path, successful as ingest_successful
+from knowledge_desk.ingest import (
+    IngestMetadata,
+    ingest_path,
+    retag_source,
+    successful as ingest_successful,
+)
 from knowledge_desk.layout import init_vault
 from knowledge_desk.lint import lint_vault
 from knowledge_desk.mcp_server import run_mcp_server
@@ -104,6 +109,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--renormalize",
         action="store_true",
         help="explicitly create a normalization revision when adapter output changed",
+    )
+
+    source = subparsers.add_parser("source", help="inspect or update published source catalog metadata")
+    source_sub = source.add_subparsers(dest="source_command", required=True)
+    source_retag = source_sub.add_parser(
+        "retag",
+        help="update subject_refs/topic_refs without re-ingesting original bytes",
+    )
+    source_retag.add_argument("source_id", help="source id (src-…)")
+    source_retag.add_argument(
+        "--subject-ref",
+        action="append",
+        dest="subject_refs",
+        default=[],
+        help="replace subject catalog associations with these entity-… refs; repeatable",
+    )
+    source_retag.add_argument(
+        "--topic-ref",
+        action="append",
+        dest="topic_refs",
+        default=[],
+        help="replace topic catalog associations with these topic-… refs; repeatable",
+    )
+    source_retag.add_argument(
+        "--clear-subjects",
+        action="store_true",
+        help="remove all subject_refs (mutually exclusive with --subject-ref)",
+    )
+    source_retag.add_argument(
+        "--clear-topics",
+        action="store_true",
+        help="remove all topic_refs (mutually exclusive with --topic-ref)",
     )
 
     observe = subparsers.add_parser(
@@ -555,6 +592,8 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if payload["success"] else 1
+    if args.command == "source":
+        return _source_command(vault_root, args)
     if args.command == "observe":
         result = append_observation_path(vault_root, args.path)
         payload = {
@@ -952,6 +991,26 @@ def _explore_command(vault_root: Path, args: argparse.Namespace) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.status in {"proposed", "noop"} else 2
+    return 2
+
+
+def _source_command(vault_root: Path, args: argparse.Namespace) -> int:
+    if args.source_command == "retag":
+        result = retag_source(
+            vault_root,
+            args.source_id,
+            subject_refs=args.subject_refs or None,
+            topic_refs=args.topic_refs or None,
+            clear_subjects=args.clear_subjects,
+            clear_topics=args.clear_topics,
+        )
+        payload = {
+            "operation": "source.retag",
+            "success": result.status in {"updated", "noop"},
+            "result": result.to_dict(),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0 if payload["success"] else 1
     return 2
 
 
